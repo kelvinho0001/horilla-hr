@@ -200,3 +200,43 @@ Working days; whether all departments share one attendance window; handling of m
 - 7-day pay periods are not a first-class `PayPeriodSettings` option; period proration needs auditing, though payroll over arbitrary ranges is possible.
 - Without an `upstream` remote, merges from official Horilla can't be tracked; to be added in Phase 1.
 - Biometric data covers personal data; NDPR/NDPA handling and retention need to be agreed with management.
+
+---
+
+## 8. Decisions received and manual payroll template analysis
+
+### 8.1 Decisions (supersede the recommendations in §7)
+| ID | Decision |
+|---|---|
+| D1 | The pay week or day does not matter. Payroll must be generated for **any date range on demand**. No fixed period is hard-coded. |
+| D2 | Approved daily attendance lives in a **new table** (`DailyAttendance`) that payroll reads directly. |
+| D3 | Payroll output is **the existing manual Excel sheet**, pre-filled by Horilla and the biometric data (see 8.2). |
+| D5 | `LoanAccount` is **extended**, not replaced. |
+| D4 | Late/early penalties are **not** switched off in code. Horilla serves both admin and regular staff. HR must be able to create fines, set amounts and assign them to employees. |
+| Import | Manual attendance report upload is accepted; it is the first connector. |
+
+### 8.2 `PAYROLL_TEMPLATE.xlsx` (Sheet1, Excel table `Table1`)
+Columns: `EMP ID | FIRST NAME | LAST NAME | WEEK 1..4 | TOTAL DAY | WORKING DAYS | BASIC SALARY | FINES | IOU | AMOUNT EARNED`.
+- `TOTAL DAY` = WEEK 1 + WEEK 2 + WEEK 3 + WEEK 4 (days attended).
+- `WORKING DAYS` is typed per employee (28, 28, 28, 24).
+- `AMOUNT EARNED` = `WORKING DAYS / TOTAL DAY * BASIC SALARY - FINES - IOU`.
+- `IOU` is the loan or advance deduction. `FINES` is a flat amount.
+- No bank columns. The bank upload template is still needed (Phase 5).
+
+**Possible error in the template formula.** As written it divides working days by days attended. Row 2: 15 days attended, 28 working days, 70,000 basic gives 28/15 x 70,000 - 5,000 - 20,000 = **105,667**, more than the basic salary. The reverse (15/28 x 70,000 = 37,500) looks intended. Rows 2-4 would be overpaid; row 5 (24/24) is unaffected, which may be why it went unnoticed. This must be confirmed before the formula is reproduced.
+
+### 8.3 Design consequences
+- Payroll sheet = a **period report**, not a fixed 4-week month. WEEK columns are generated from the chosen date range (consecutive 7-day buckets from the start date; a short final bucket is allowed). Any range is accepted.
+- Pre-filled by Horilla: EMP ID (badge id), names, week counts and TOTAL DAY from approved `DailyAttendance`, BASIC SALARY from the pay profile, FINES from approved fines due in the range, IOU from the loan ledger. `WORKING DAYS` is calculated from the schedule, holidays and rest days, and is HR-overridable per row.
+- Export keeps live Excel formulas and the `Table1` structure so the accountant's sheet looks and behaves the same. Computed values are also stored server-side so the figures are auditable and cannot change silently.
+- Basic salary here is a **period amount (monthly)**, not a daily rate. The pay profile therefore needs a "basic for the period" amount plus the working-days divisor, with a daily-rate mode as an option.
+- **Fines:** `LoanAccount` already has type `fine`, but there is no catalogue, approval or waiver. Add a `FineType` list (name, default amount) and an approval and waiver workflow on the extended loan/fine record. HR creates, amounts and assigns them. Nothing is created automatically from attendance, and existing Horilla late/early penalties remain untouched.
+- `LoanAccount` extension: repayment frequency (weekly or monthly), `Decimal` instalment and balance, repayment ledger unique per loan and run, approval. Because the range is arbitrary, a monthly instalment is deducted once per calendar month in which it falls due, and exactly one run in that month takes it.
+
+### 8.4 Open questions
+1. Confirm the `AMOUNT EARNED` formula direction (8.2).
+2. Is BASIC SALARY always the full-month amount, even when the report range is shorter than a month? Should a short range be prorated?
+3. If a monthly loan instalment falls due and several overlapping ranges are exported, which run owns the deduction? Proposal: the first run that is marked final or approved.
+4. What are the "WORKING DAYS" rules (28 vs 24 in the sample)? By department, by schedule, or typed by HR?
+5. Fines: deducted in full in the first run after approval, or in instalments?
+6. Bank upload template and bank name.
