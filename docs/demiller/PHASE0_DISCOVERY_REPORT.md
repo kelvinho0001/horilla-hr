@@ -240,3 +240,44 @@ Columns: `EMP ID | FIRST NAME | LAST NAME | WEEK 1..4 | TOTAL DAY | WORKING DAYS
 4. What are the "WORKING DAYS" rules (28 vs 24 in the sample)? By department, by schedule, or typed by HR?
 5. Fines: deducted in full in the first run after approval, or in instalments?
 6. Bank upload template and bank name.
+
+---
+
+## 9. Second round of decisions and the revised template (`PAYROLL_TEMPLATE_1.xlsx`)
+
+### 9.1 Decisions
+| # | Decision |
+|---|---|
+| Formula | `AMOUNT EARNED = TOTAL DAY / WORKING DAYS * BASIC SALARY - FINES - IOU` (days attended divided by working days). The new template already uses this direction. |
+| Working days | **Not hard-coded.** HR enters the working days for the month when generating the payroll sheet (one default for the run, overridable per employee). |
+| Loan instalment ownership | The first **approved** payroll run that covers the due instalment takes it. Later runs overlapping the same month cannot deduct it again. Typical use is a run in the last week of the month, but any range works. |
+| Fines | Deducted **in full** in the first payroll run after approval. |
+| Bank | Employee bank record uses a **drop-down of banks**. A bank list with codes can be **uploaded as CSV**, and the payment schedule picks the bank code from it. |
+
+### 9.2 What the revised template contains
+Three sheets:
+1. `PAYROLL` (`Table1`): `EMP ID | FIRST NAME | LAST NAME | DEPARTMENT | WEEK 1-4 | TOTAL DAY | WORKING DAYS | BASIC SALARY | FINES | IOU | AMOUNT EARNED`.
+2. `PAYMENT SCHEDULE` (`Table3`): `EMP ID | FIRST NAME | LAST NAME | DEPARTMENT | ACCOUNT NUMBER | BENEFICIARY NAME | AMOUNT | BANK CODE | NARRATION`. Account number is stored as text (`'0123456789'`). The ID, name, department and AMOUNT cells are formulas linked to `Table1`. BANK CODE is empty in the sample and is what the bank list will fill. Narration is free text (`SEPTEMBER SALARY - DEMILLER FARMS`).
+3. `BANK CODES`: `CODE | NAME`, 87 rows (for example `044` Access Bank). Several codes have leading zeros, so codes must be handled as text, never as numbers.
+
+This is the accountant's working sheet. It may or may not be the bank's exact upload format; I'll treat `PAYMENT SCHEDULE` as the export layout and ask for the bank's own template only if it differs (open question 3 below).
+
+### 9.3 Design consequences
+- **Bank directory:** new `Bank` table (`code` as text, `name`, active) with a CSV upload (columns `CODE,NAME`; validate, upsert by code, report rows skipped). The employee bank record gains a foreign key to `Bank`. The existing free-text `bank_name` and `any_other_code1` on `EmployeeBankDetails` are kept for compatibility and can be back-filled by matching names. This is an extension of Horilla's model (decision D5-style), not a new employee bank table.
+- **Export:** one workbook with the same three sheets and table names. `PAYROLL` and `PAYMENT SCHEDULE` keep their formulas; `BANK CODES` is regenerated from the bank directory; BANK CODE is filled from the employee's selected bank. Account numbers and bank codes are written as text. Narration is configurable per run, with a default such as "<MONTH> SALARY - DEMILLER FARMS".
+- **Validation before export:** missing bank, missing or non-numeric account number, unknown bank code, `WORKING DAYS` of zero, negative net pay (flag, do not silently clamp), and total attendance days exceeding working days (flag).
+- **Run inputs:** date range, working days (default plus per-employee override), narration. These are stored on the run so the figures can be reproduced.
+- **Money:** `Decimal` throughout; rounding rule (to the kobo, or to the naira) to be confirmed.
+- **Loan ledger:** as in 8.3, with ownership by first approved run for the month. Ledger rows are created only when a run is approved, so drafts and recalculations never consume an instalment. A draft shows the instalment as "due" and approval locks it.
+- **Fines:** approved fines with no ledger entry are picked up by the next approved run and deducted in full. Waiver before the run removes them.
+- **Department column** comes from the employee's work information.
+
+### 9.4 Remaining questions
+1. BASIC SALARY: is it always the monthly amount for the run? If the run covers less than a month, should it be prorated or used as entered? (It is currently a fixed value, and the formula already scales by days attended over working days.)
+2. Rounding of AMOUNT EARNED: nearest naira or kobo?
+3. Is the `PAYMENT SCHEDULE` layout exactly what the bank accepts, or is there a separate bank upload file?
+4. WEEK columns for ranges longer or shorter than four weeks: add or drop WEEK columns to fit the range? (Proposal: one column per 7-day block, and the TOTAL DAY formula sums however many there are.)
+5. Who may approve a run (and so consume loan instalments and fines)? Proposal: the HR/Payroll Approver role only.
+
+### 9.5 Next step
+Discovery is complete and the approach is settled. On your go-ahead I will start Phase 1 and 2: add the `upstream` remote, run the baseline tests, create `biometric_integration` with the manual CSV/XLSX upload connector, the mapping screens and the raw transaction store. I will not touch payroll until Phase 4.
