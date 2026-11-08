@@ -18,3 +18,8 @@ Examples:
     INSTALLED_APPS += ["client_portal"]
     MIDDLEWARE += ["client_portal.middleware.ClientTrackingMiddleware"]
 """
+
+# --- Demiller Farms custom apps (kept out of base.py to ease upstream merges) ---
+from .base import INSTALLED_APPS  # noqa: E402
+
+INSTALLED_APPS += ["biometric_integration"]

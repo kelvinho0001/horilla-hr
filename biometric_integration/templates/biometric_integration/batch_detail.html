@@ -1,0 +1,6 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
+<h2>{% trans "Import" %} #{{ batch.pk }} — {{ batch.get_status_display }}</h2>
+<p>{{ batch.provider }} · {{ batch.file_name }} · {{ batch.started_at }}</p>
+<ul><li>{% trans "Received" %}: {{ batch.received_count }}</li><li>{% trans "Imported" %}: {{ batch.imported_count }}</li><li>{% trans "Duplicates" %}: {{ batch.duplicate_count }}</li><li>{% trans "Unmapped" %}: {{ batch.unmapped_count }}</li><li>{% trans "Failed" %}: {{ batch.failed_count }}</li></ul>
+{% if batch.errors %}<h3>{% trans "Errors" %}</h3><table class="oh-table"><tr><th>{% trans "Row" %}</th><th>{% trans "Problem" %}</th></tr>{% for e in batch.errors %}<tr><td>{{ e.row|default:"—" }}</td><td>{{ e.message }}</td></tr>{% endfor %}</table>{% endif %}
+</section>{% endblock %}

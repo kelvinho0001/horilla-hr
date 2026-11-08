@@ -1,0 +1,9 @@
+{% load i18n %}
+<table class="oh-table" style="width:100%;">
+  <thead><tr><th>{% trans "When" %}</th><th>{% trans "Provider" %}</th><th>{% trans "File" %}</th><th>{% trans "Period" %}</th><th>{% trans "Received" %}</th><th>{% trans "Imported" %}</th><th>{% trans "Duplicates" %}</th><th>{% trans "Unmapped" %}</th><th>{% trans "Failed" %}</th><th>{% trans "Status" %}</th></tr></thead>
+  <tbody>{% for b in batches %}
+    <tr><td><a href="{% url 'bio-int-batch-detail' b.pk %}">{{ b.started_at|date:"Y-m-d H:i" }}</a></td><td>{{ b.provider }}</td><td>{{ b.file_name }}</td>
+    <td>{% if b.period_start %}{{ b.period_start }} → {{ b.period_end }}{% endif %}</td>
+    <td>{{ b.received_count }}</td><td>{{ b.imported_count }}</td><td>{{ b.duplicate_count }}</td><td>{{ b.unmapped_count }}</td><td>{{ b.failed_count }}</td><td>{{ b.get_status_display }}</td></tr>
+  {% empty %}<tr><td colspan="10">{% trans "No imports yet." %}</td></tr>{% endfor %}</tbody>
+</table>

@@ -1,0 +1,9 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
+<h2>{% trans "Biometric ID mappings" %}</h2>
+<form method="get"><input name="q" value="{{ q }}" placeholder="{% trans 'Search' %}"> <button class="oh-btn oh-btn--light">{% trans "Search" %}</button> <a class="oh-btn oh-btn--secondary" href="{% url 'bio-int-mapping-create' %}">{% trans "Add mapping" %}</a></form>
+<table class="oh-table" style="width:100%;margin-top:1rem;"><thead><tr><th>{% trans "Provider" %}</th><th>{% trans "Biometric ID" %}</th><th>{% trans "Employee" %}</th><th>{% trans "Status" %}</th><th>{% trans "Active" %}</th><th></th></tr></thead>
+{% for m in page %}<tr><td>{{ m.provider }}</td><td>{{ m.external_employee_id }}</td><td>{{ m.employee }}</td><td>{{ m.get_status_display }}</td><td>{{ m.is_active }}</td>
+<td>{% if m.is_active %}<form method="post" action="{% url 'bio-int-mapping-deactivate' m.pk %}">{% csrf_token %}<button class="oh-btn oh-btn--light">{% trans "Deactivate" %}</button></form>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6">{% trans "No mappings." %}</td></tr>{% endfor %}</table>
+<p>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ q }}">‹</a>{% endif %} {{ page.number }}/{{ page.paginator.num_pages }} {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ q }}">›</a>{% endif %}</p>
+</section>{% endblock %}

@@ -1,0 +1,4 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
+<h2>{% trans "Map biometric ID to employee" %}</h2>
+<form method="post">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary" type="submit">{% trans "Save" %}</button></form>
+</section>{% endblock %}

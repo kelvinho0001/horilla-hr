@@ -1,0 +1,8 @@
+{% load i18n %}
+<div class="oh-tabs__tablist" style="margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+  <a class="oh-btn oh-btn--light" href="{% url "bio-int-dashboard" %}">{% trans "Dashboard" %}</a>
+  <a class="oh-btn oh-btn--light" href="{% url "bio-int-upload" %}">{% trans "Upload report" %}</a>
+  <a class="oh-btn oh-btn--light" href="{% url "bio-int-batches" %}">{% trans "Import history" %}</a>
+  <a class="oh-btn oh-btn--light" href="{% url "bio-int-unmapped" %}">{% trans "Unmapped IDs" %}</a>
+  <a class="oh-btn oh-btn--light" href="{% url "bio-int-mapping-list" %}">{% trans "Mappings" %}</a>
+</div>

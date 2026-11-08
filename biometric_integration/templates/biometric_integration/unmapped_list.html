@@ -1,0 +1,8 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
+<h2>{% trans "Unmapped biometric IDs" %}</h2>
+{% for s in sections %}<h3>{{ s.provider }}</h3>
+<table class="oh-table" style="width:100%;"><thead><tr><th>{% trans "Biometric ID" %}</th><th>{% trans "Transactions" %}</th><th>{% trans "Suggested employee (badge ID match)" %}</th><th></th></tr></thead>
+{% for r in s.rows %}<tr><td>{{ r.external_employee_id }}</td><td>{{ r.count }}</td><td>{{ r.suggestion|default:"—" }}</td>
+<td><a class="oh-btn oh-btn--light" href="{% url 'bio-int-mapping-create' %}?provider={{ s.provider.pk }}&external_employee_id={{ r.external_employee_id|urlencode }}{% if r.suggestion %}&employee={{ r.suggestion.pk }}{% endif %}">{% trans "Map" %}</a></td></tr>
+{% empty %}<tr><td colspan="4">{% trans "Nothing unmapped." %}</td></tr>{% endfor %}</table>{% endfor %}
+</section>{% endblock %}

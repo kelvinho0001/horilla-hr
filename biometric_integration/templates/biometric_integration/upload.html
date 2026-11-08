@@ -1,0 +1,5 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
+<h2>{% trans "Upload attendance report" %}</h2>
+<p>{% trans "CSV or Excel. Needs an employee/user ID column and either one date-time column or separate date and time columns. Re-uploading the same report is safe." %}</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary" type="submit">{% trans "Import" %}</button></form>
+</section>{% endblock %}

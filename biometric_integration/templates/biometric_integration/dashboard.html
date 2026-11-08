@@ -1,0 +1,15 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
+<h2 class="oh-main__titlebar-title">{% trans "Biometric Integration" %}</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin:1rem 0;">
+  <div class="oh-card"><b>{% trans "Last successful sync" %}</b><br>{{ last_ok|default:"—" }}</div>
+  <div class="oh-card"><b>{% trans "Last attempt" %}</b><br>{{ last_attempt|default:"—" }}</div>
+  <div class="oh-card"><b>{% trans "Transactions stored" %}</b><br>{{ transactions_total }}</div>
+  <div class="oh-card"><b>{% trans "Duplicates skipped" %}</b><br>{{ duplicates_total }}</div>
+  <div class="oh-card"><b>{% trans "Unmapped IDs" %}</b><br><a href="{% url 'bio-int-unmapped' %}">{{ unmapped_ids }}</a></div>
+  <div class="oh-card"><b>{% trans "Failed rows" %}</b><br>{{ failed_total }}</div>
+</div>
+<h3>{% trans "Providers" %}</h3>
+<ul>{% for p in providers %}<li>{{ p.name }} — {{ p.get_provider_type_display }}</li>{% empty %}<li>{% trans "No provider yet. One is created on the first upload." %}</li>{% endfor %}</ul>
+<h3>{% trans "Recent imports" %}</h3>
+{% include "biometric_integration/_batch_table.html" with batches=recent %}
+</section>{% endblock %}
