@@ -1,0 +1,18 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "bank_export/_nav.html" %}
+<h2>{{ run.name }} — {{ run.get_status_display }}</h2>
+<p>{{ run.start_date }} → {{ run.end_date }} · {% trans "Narration" %}: <b>{{ narration }}</b></p>
+{% if pf %}
+<p>{% trans "Ready to pay" %}: <b>{{ pf.count }}</b> {% trans "workers" %} · {% trans "Total" %}: <b>₦{{ pf.total|floatformat:2 }}</b></p>
+{% if pf.problems %}<h3>{% trans "Needs attention" %}</h3><ul>{% for p in pf.problems %}<li style="{% if p.blocking %}color:#b00020{% endif %}">{{ p.label }} — {{ p.issues|join:"; " }}{% if not p.blocking %} ({% trans "skipped" %}){% endif %}</li>{% endfor %}</ul>{% endif %}
+{% if can_generate %}<form method="post" action="{% url 'bx-generate' run.pk %}">{% csrf_token %}
+{% if pf.blocking %}<label><input type="checkbox" name="partial" value="1"> {% trans "Export the workers with valid details only and leave the problem workers out (they stay unpaid)" %}</label><br>{% endif %}
+<button class="oh-btn oh-btn--secondary" {% if not pf.count %}disabled{% endif %}>{% trans "Generate payment file" %}</button></form>{% endif %}
+{% endif %}
+<h3 style="margin-top:1.5rem">{% trans "Payment files" %}</h3>
+<table class="oh-table" style="width:100%"><thead><tr><th>{% trans "Reference" %}</th><th>{% trans "Created" %}</th><th>{% trans "Employees" %}</th><th>{% trans "Total" %}</th><th>{% trans "Status" %}</th><th></th></tr></thead>
+{% for b in batches %}<tr><td>{{ b.reference }}</td><td>{{ b.created_at|date:"Y-m-d H:i" }} {{ b.created_by }}</td><td>{{ b.employee_count }}</td><td>₦{{ b.total_amount|floatformat:2 }}</td><td>{{ b.get_status_display }}{% if b.excluded %}<br><small>{{ b.excluded|length }} {% trans "left out" %}</small>{% endif %}</td>
+<td><a href="{% url 'bx-download' b.pk %}">{% trans "Download" %}</a>
+{% if b.status == "generated" %}{% if can_pay %}<form method="post" action="{% url 'bx-paid' b.pk %}" style="display:inline">{% csrf_token %}<button class="oh-btn oh-btn--success">{% trans "Mark paid" %}</button></form>{% endif %}
+{% if can_supersede %}<form method="post" action="{% url 'bx-supersede' b.pk %}" style="display:inline">{% csrf_token %}<input name="reason" required placeholder="{% trans 'Reason' %}"><button class="oh-btn oh-btn--light">{% trans "Supersede" %}</button></form>{% endif %}{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6">{% trans "None yet." %}</td></tr>{% endfor %}</table>
+</section>{% endblock %}

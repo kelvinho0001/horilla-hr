@@ -17,6 +17,14 @@ R = "Table1[[#This Row],[{}]]"
 
 
 def build_workbook(run):
+    wb = populate_workbook(Workbook(), run)
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def populate_workbook(wb, run):
+    """Fill ``wb`` (a fresh Workbook) with PAYROLL and RUN INFO; bank_export adds the bank sheets."""
     lines = list(run.lines.all())
     n_weeks = max((len(l.week_days) for l in lines), default=1)
     week_cols = [f"WEEK {i}" for i in range(1, n_weeks + 1)]
@@ -24,7 +32,6 @@ def build_workbook(run):
         ["EMP ID", "FIRST NAME", "LAST NAME", "DEPARTMENT"] + week_cols
         + ["TOTAL DAY", "WORKING DAYS", "BASIC SALARY", "FINES", "IOU", "AMOUNT EARNED"]
     )
-    wb = Workbook()
     ws = wb.active
     ws.title = "PAYROLL"
     ws.append(headers)
@@ -63,6 +70,4 @@ def build_workbook(run):
     info["A1"].font = Font(bold=True)
     info.column_dimensions["A"].width = 24
     info.column_dimensions["B"].width = 50
-    buf = BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    return wb

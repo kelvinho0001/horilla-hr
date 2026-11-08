@@ -1,0 +1,13 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "bank_export/_nav.html" %}
+<h2>{% trans "Bank payment export" %}</h2>
+<table class="oh-table" style="width:100%"><thead><tr><th>{% trans "Payroll" %}</th><th>{% trans "Period" %}</th><th>{% trans "Approval" %}</th><th>{% trans "Employees" %}</th><th>{% trans "Total payment" %}</th><th>{% trans "Bank issues" %}</th><th>{% trans "Export" %}</th></tr></thead>
+{% for r in rows %}<tr><td><a href="{% url 'bx-run' r.run.pk %}">{{ r.run.name }}</a></td><td>{{ r.run.start_date }} → {{ r.run.end_date }}</td><td>{{ r.run.get_status_display }}</td>
+<td>{% if r.pf %}{{ r.pf.count }}{% else %}{{ r.export.employee_count|default:"—" }}{% endif %}</td><td>₦{% if r.pf %}{{ r.pf.total|floatformat:2 }}{% else %}{{ r.export.total_amount|floatformat:2 }}{% endif %}</td>
+<td>{% if r.pf %}{% if r.pf.blocking %}<b style="color:#b00020">{{ r.pf.blocking|length }}</b>{% else %}0{% endif %}{% else %}—{% endif %}</td>
+<td>{% if r.export %}{{ r.export.reference }} · <a href="{% url 'bx-download' r.export.pk %}">{% trans "Download" %}</a>{% else %}{% trans "Not exported" %}{% endif %}</td></tr>
+{% empty %}<tr><td colspan="7">{% trans "No approved payroll yet." %}</td></tr>{% endfor %}</table>
+<h3 style="margin-top:2rem">{% trans "Export history" %}</h3>
+<table class="oh-table" style="width:100%"><thead><tr><th>{% trans "Reference" %}</th><th>{% trans "Payroll" %}</th><th>{% trans "When" %}</th><th>{% trans "By" %}</th><th>{% trans "Employees" %}</th><th>{% trans "Total" %}</th><th>{% trans "Status" %}</th><th></th></tr></thead>
+{% for b in history %}<tr><td>{{ b.reference }}</td><td>{{ b.run }}</td><td>{{ b.created_at|date:"Y-m-d H:i" }}</td><td>{{ b.created_by }}</td><td>{{ b.employee_count }}</td><td>₦{{ b.total_amount|floatformat:2 }}</td><td>{{ b.get_status_display }}{% if b.supersede_reason %}<br><small>{{ b.supersede_reason }}</small>{% endif %}</td><td><a href="{% url 'bx-download' b.pk %}">{% trans "Download" %}</a></td></tr>
+{% empty %}<tr><td colspan="8">{% trans "No exports yet." %}</td></tr>{% endfor %}</table>
+</section>{% endblock %}

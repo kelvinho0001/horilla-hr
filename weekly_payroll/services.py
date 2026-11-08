@@ -301,7 +301,7 @@ def approve(run, user):
 
     clash = (
         PayrollLine.objects.filter(
-            run__status=PayrollRun.APPROVED, run__start_date__lte=run.end_date,
+            run__status__in=PayrollRun.FINAL, run__start_date__lte=run.end_date,
             run__end_date__gte=run.start_date, employee__in=run.lines.values("employee"),
         )
         .exclude(run=run)

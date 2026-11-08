@@ -1,0 +1,8 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "bank_export/_nav.html" %}
+<h2>{% trans "Worker bank accounts" %}</h2>
+<p>{{ problem_count }} {% trans "of" %} {{ rows|length }} {% trans "need attention" %}.</p>
+<table class="oh-table" style="width:100%"><thead><tr><th>ID</th><th>{% trans "Worker" %}</th><th>{% trans "Bank" %}</th><th>{% trans "Account" %}</th><th>{% trans "Status" %}</th><th></th></tr></thead>
+{% for r in rows %}<tr><td>{{ r.employee.badge_id }}</td><td>{{ r.employee.get_full_name }}</td><td>{{ r.bank.name|default:"—" }}</td><td>{{ r.account }}</td><td>{% if r.issues %}<span style="color:#b00020">{{ r.issues|join:"; " }}</span>{% else %}OK{% endif %}</td>
+<td>{% if can_edit %}<a class="oh-btn oh-btn--light" href="{% url 'bx-account-edit' r.employee.pk %}">{% trans "Edit" %}</a>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6">{% trans "No workers with a pay profile yet." %}</td></tr>{% endfor %}</table>
+</section>{% endblock %}

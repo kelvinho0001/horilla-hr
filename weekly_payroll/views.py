@@ -31,7 +31,7 @@ def _runs_for(user):
     qs = PayrollRun.objects.select_related("department")
     # Accountants see approved payroll only.
     if not user.has_perm(P + "add_payrollrun"):
-        qs = qs.filter(status=PayrollRun.APPROVED)
+        qs = qs.filter(status__in=PayrollRun.FINAL)
     return qs
 
 

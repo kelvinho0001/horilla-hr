@@ -137,9 +137,13 @@ class LoanAgreement(models.Model):
 
 
 class PayrollRun(models.Model):
-    DRAFT, REVIEWED, APPROVED = "draft", "reviewed", "approved"
-    STATUS = [(DRAFT, _("Draft")), (REVIEWED, _("Reviewed")), (APPROVED, _("Approved"))]
-    FINAL = (APPROVED,)
+    DRAFT, REVIEWED, APPROVED, EXPORTED, PAID = "draft", "reviewed", "approved", "exported", "paid"
+    STATUS = [
+        (DRAFT, _("Draft")), (REVIEWED, _("Reviewed")), (APPROVED, _("Approved")),
+        (EXPORTED, _("Exported")), (PAID, _("Paid")),
+    ]
+    # Once approved the figures never change; exported/paid are later stages of the same locked run.
+    FINAL = (APPROVED, EXPORTED, PAID)
 
     name = models.CharField(max_length=150)
     start_date = models.DateField()

@@ -18,6 +18,10 @@ class WeeklyPayrollConfig(AppConfig):
         post_migrate.connect(permissions.sync_groups, sender=self)
         settings.APPS.append("weekly_payroll")
         urlpatterns.append(path("weekly-payroll/", include("weekly_payroll.urls")))
+        # Another app's sidebar may already have resolved URLs (it reverses at import); rebuild the cache.
+        from django.urls import clear_url_caches
+
+        clear_url_caches()
         from . import sidebar  # noqa: F401
 
         super().ready()
