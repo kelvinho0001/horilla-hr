@@ -22,4 +22,4 @@ Examples:
 # --- Demiller Farms custom apps (kept out of base.py to ease upstream merges) ---
 from .base import INSTALLED_APPS  # noqa: E402
 
-INSTALLED_APPS += ["biometric_integration"]
+INSTALLED_APPS += ["biometric_integration", "attendance_processing"]

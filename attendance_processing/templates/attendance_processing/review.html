@@ -1,0 +1,30 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "attendance_processing/_nav.html" %}
+<h2>{% trans "Attendance review" %}</h2>
+{% if error %}<p style="color:#b00020">{{ error }}</p>{% endif %}
+<form method="get" style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;margin-bottom:1rem;">
+  <label>{% trans "From" %}<br><input type="date" name="start" value="{{ start|date:'Y-m-d' }}"></label>
+  <label>{% trans "To" %}<br><input type="date" name="end" value="{{ end|date:'Y-m-d' }}"></label>
+  <span>{% trans "or whole months" %}:</span>
+  <label>{% trans "From month" %}<br><input type="month" name="from_month"></label>
+  <label>{% trans "To month" %}<br><input type="month" name="to_month"></label>
+  <label>{% trans "Department" %}<br><select name="department"><option value="">{% trans "All" %}</option>{% for d in departments %}<option value="{{ d.pk }}" {% if dept and dept.pk == d.pk %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
+  <label>{% trans "Worker category" %}<br><select name="employee_type"><option value="">{% trans "All" %}</option>{% for t in employee_types %}<option value="{{ t.pk }}" {% if etype and etype.pk == t.pk %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+  <label><input type="checkbox" name="exceptions" value="1" {% if only_exceptions %}checked{% endif %}> {% trans "Exceptions only" %}</label>
+  <button class="oh-btn oh-btn--secondary">{% trans "Show" %}</button>
+</form>
+{% if not error %}
+<p>{% trans "Showing" %} {{ start }} → {{ end }} · {{ rows|length }} {% trans "workers" %} · {% trans "present days" %}: {{ totals.present }} · {% trans "need review" %}: <b>{{ totals.unresolved }}</b></p>
+<div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem;">
+{% if can_process %}<form method="post" action="{% url 'att-proc-process' %}">{% csrf_token %}<input type="hidden" name="start" value="{{ start|date:'Y-m-d' }}"><input type="hidden" name="end" value="{{ end|date:'Y-m-d' }}"><input type="hidden" name="department" value="{{ dept.pk|default:'' }}"><input type="hidden" name="employee_type" value="{{ etype.pk|default:'' }}"><input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="oh-btn oh-btn--secondary">{% trans "Process from biometric punches" %}</button></form>{% endif %}
+{% if can_correct %}<form method="post" action="{% url 'att-proc-bulk-absent' %}">{% csrf_token %}<input type="hidden" name="start" value="{{ start|date:'Y-m-d' }}"><input type="hidden" name="end" value="{{ end|date:'Y-m-d' }}"><input type="hidden" name="department" value="{{ dept.pk|default:'' }}"><input type="hidden" name="employee_type" value="{{ etype.pk|default:'' }}"><input type="hidden" name="next" value="{{ request.get_full_path }}"><input name="reason" required placeholder="{% trans 'Reason' %}"><button class="oh-btn oh-btn--light">{% trans "Mark all missing as absent" %}</button></form>{% endif %}
+{% if can_approve %}<form method="post" action="{% url 'att-proc-approve' %}" onsubmit="return confirm('{% trans 'Approve and lock this range?' %}')">{% csrf_token %}<input type="hidden" name="start" value="{{ start|date:'Y-m-d' }}"><input type="hidden" name="end" value="{{ end|date:'Y-m-d' }}"><input type="hidden" name="department" value="{{ dept.pk|default:'' }}"><input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="oh-btn oh-btn--success">{% trans "Approve range" %}</button></form>{% endif %}
+</div>
+<div style="overflow-x:auto"><table class="oh-table" style="font-size:.8rem;">
+<thead><tr><th>ID</th><th>{% trans "Employee" %}</th><th>{% trans "Dept" %}</th>{% for d in days %}<th title="{{ d }}">{{ d|date:"d/m" }}<br>{{ d|date:"D" }}</th>{% endfor %}{% for n,a,b in weeks %}<th>{% trans "Wk" %}{{ n }}</th>{% endfor %}<th>{% trans "Present" %}</th><th>{% trans "Absent" %}</th><th>{% trans "Leave" %}</th><th>{% trans "Review" %}</th></tr></thead>
+<tbody>{% for r in rows %}<tr><td>{{ r.employee.badge_id|default:"" }}</td><td>{{ r.employee.get_full_name }}</td><td>{{ r.employee.employee_work_info.department_id|default:"" }}</td>
+{% for d, c in r.cells %}<td style="text-align:center;{% if c.status == 'missing' or c.status == 'review' %}background:#fde7e9;{% elif c.status == 'present' %}background:#e6f4ea;{% endif %}">{% if c %}<a title="{{ c.get_status_display }}{% if c.approval_id %} ({% trans 'locked' %}){% endif %}" href="{% url 'att-proc-day' r.employee.pk d|date:'Y-m-d' %}">{% if c.status == 'present' %}P{% elif c.status == 'absent' %}A{% elif c.status == 'leave' %}L{% elif c.status == 'holiday' %}H{% elif c.status == 'rest' %}R{% else %}?{% endif %}{% if c.approval_id %}🔒{% endif %}</a>{% else %}·{% endif %}</td>{% endfor %}
+{% for w in r.weeks %}<td>{{ w }}</td>{% endfor %}<td><b>{{ r.present }}</b></td><td>{{ r.absent }}</td><td>{{ r.leave }}</td><td>{{ r.unresolved }}</td></tr>
+{% empty %}<tr><td colspan="30">{% trans "No workers with a biometric mapping match. Map biometric IDs first." %}</td></tr>{% endfor %}</tbody></table></div>
+<p style="font-size:.8rem">P {% trans "present" %} · A {% trans "absent" %} · L {% trans "leave" %} · H {% trans "holiday" %} · R {% trans "rest day" %} · ? {% trans "needs review" %} · · {% trans "not processed" %}</p>
+{% endif %}
+</section>{% endblock %}

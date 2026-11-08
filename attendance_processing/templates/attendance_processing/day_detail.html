@@ -1,0 +1,13 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "attendance_processing/_nav.html" %}
+<h2>{{ emp.get_full_name }} — {{ day }}</h2>
+<p>{% trans "Status" %}: <b>{{ daily.get_status_display|default:"—" }}</b>{% if daily.approval_id %} 🔒 {% trans "approved" %}{% endif %} {% if daily.flags %}· {{ daily.flags|join:", " }}{% endif %}</p>
+<h3>{% trans "Biometric punches" %}</h3>
+<ul>{% for p in punches %}<li>{{ p.attendance_timestamp }} · {% trans "device" %} {{ p.external_device_id|default:"—" }} · {{ p.provider }}</li>{% empty %}<li>{% trans "No punches." %}</li>{% endfor %}</ul>
+{% if perms.attendance_processing.correct_attendance and not daily.approval_id %}
+<h3>{% trans "Correct" %}</h3>
+<form method="post" action="{% url 'att-proc-correct' %}">{% csrf_token %}<input type="hidden" name="employee" value="{{ emp.pk }}"><input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+<select name="status"><option value="present">{% trans "Present" %}</option><option value="absent">{% trans "Absent" %}</option><option value="leave">{% trans "Approved leave" %}</option><option value="holiday">{% trans "Holiday" %}</option><option value="rest">{% trans "Rest day" %}</option></select>
+<input name="reason" required placeholder="{% trans 'Reason (required)' %}" size="40"><button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></form>{% endif %}
+<h3>{% trans "Correction history" %}</h3>
+<ul>{% for c in corrections %}<li>{{ c.created_at }} · {{ c.user }} · {{ c.old_status|default:"—" }} → {{ c.new_status }} · {{ c.reason }}</li>{% empty %}<li>{% trans "None." %}</li>{% endfor %}</ul>
+</section>{% endblock %}

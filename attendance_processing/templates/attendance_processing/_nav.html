@@ -1,0 +1,7 @@
+{% load i18n %}
+<div style="margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+  <a class="oh-btn oh-btn--light" href="{% url 'att-proc-review' %}">{% trans "Review" %}</a>
+  <a class="oh-btn oh-btn--light" href="{% url 'att-proc-approvals' %}">{% trans "Approvals" %}</a>
+  <a class="oh-btn oh-btn--light" href="{% url 'att-proc-rules' %}">{% trans "Rules" %}</a>
+  <a class="oh-btn oh-btn--light" href="{% url 'bio-int-upload' %}">{% trans "Upload report" %}</a>
+</div>
