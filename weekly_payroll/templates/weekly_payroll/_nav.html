@@ -1,0 +1,8 @@
+{% load i18n %}
+<div style="margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
+  <a class="oh-btn oh-btn--light" href="{% url 'wp-runs' %}">{% trans "Payroll runs" %}</a>
+  {% if perms.weekly_payroll.view_workerpayprofile %}<a class="oh-btn oh-btn--light" href="{% url 'wp-profiles' %}">{% trans "Pay profiles" %}</a>{% endif %}
+  {% if perms.weekly_payroll.view_fine %}<a class="oh-btn oh-btn--light" href="{% url 'wp-fines' %}">{% trans "Fines" %}</a>{% endif %}
+  {% if perms.weekly_payroll.view_loanagreement %}<a class="oh-btn oh-btn--light" href="{% url 'wp-loans' %}">{% trans "Loan agreements" %}</a>{% endif %}
+</div>
+{% if messages %}{% for m in messages %}<p style="padding:.5rem;background:#f3f3f3;">{{ m }}</p>{% endfor %}{% endif %}

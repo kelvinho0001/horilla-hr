@@ -1,0 +1,7 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "weekly_payroll/_nav.html" %}
+<h2>{% trans "Payroll runs" %}</h2>
+{% if can_add %}<a class="oh-btn oh-btn--secondary" href="{% url 'wp-run-new' %}">{% trans "New payroll run" %}</a>{% endif %}
+<table class="oh-table" style="width:100%;margin-top:1rem;"><thead><tr><th>{% trans "Name" %}</th><th>{% trans "Period" %}</th><th>{% trans "Workers" %}</th><th>{% trans "Total net" %}</th><th>{% trans "Status" %}</th></tr></thead>
+{% for r in runs %}<tr><td><a href="{% url 'wp-run-detail' r.pk %}">{{ r.name }}</a></td><td>{{ r.start_date }} → {{ r.end_date }}</td><td>{{ r.employee_count }}</td><td>₦{{ r.total_net|floatformat:2 }}</td><td>{{ r.get_status_display }}</td></tr>
+{% empty %}<tr><td colspan="5">{% trans "No payroll runs." %}</td></tr>{% endfor %}</table>
+</section>{% endblock %}
