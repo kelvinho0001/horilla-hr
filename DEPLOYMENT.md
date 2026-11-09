@@ -15,7 +15,7 @@ Horilla (Django) + the four Demiller apps (`biometric_integration`, `attendance_
 |---|---|---|
 | **Setup Python App** in cPanel (CloudLinux Passenger) | runs Django | cPanel > Software > *Setup Python App* exists |
 | **Python 3.12 or newer** selectable there | Horilla needs 3.12-3.14 | the Python version dropdown |
-| **PostgreSQL** (*PostgreSQL Databases* in cPanel) | Horilla ships a PostgreSQL driver only; MySQL/MariaDB is **not supported** | cPanel > Databases |
+| **PostgreSQL 14 or newer** (*PostgreSQL Databases* in cPanel), **or** accept SQLite (section 3b) | Horilla/Django 5.2 supports PostgreSQL 14+ only; MySQL/MariaDB is **not supported**. Many cPanel hosts run PostgreSQL 9.x-13, which is too old (error: `PostgreSQL 14 or later is required`) | cPanel > PostgreSQL Databases, or in Terminal `psql --version` |
 | **SSH / Terminal** | install packages, run migrations | cPanel > Terminal (or SSH access enabled) |
 | **~1 GB RAM / process limit** during install | `spacy`, `PyMuPDF`, `pandas` are large; CloudLinux can kill `pip` | ask the host, or see 6.1 |
 | Outbound HTTPS to `github.com` and `pypi.org` | one dependency (spaCy model) downloads from GitHub | from Terminal: `curl -sI https://github.com` |
@@ -32,6 +32,8 @@ Below, `CPUSER` is your cPanel username.
 
 ## 3. Create the database
 
+> **First check the PostgreSQL version your host runs (14 or newer is required).** If it is older, skip to **3b (SQLite)**.
+
 cPanel > **PostgreSQL Databases**:
 1. Create a database, e.g. `horilla` (cPanel adds the prefix: `CPUSER_horilla`).
 2. Create a user, e.g. `hrapp` (`CPUSER_hrapp`) with a long random password.
@@ -44,6 +46,24 @@ postgres://CPUSER_hrapp:URL-ENCODED-PASSWORD@localhost:5432/CPUSER_horilla
 ```
 
 Avoid `@ : / # ?` in the password, or URL-encode them (`@` -> `%40`). Use `localhost` unless your host gives another host name.
+
+### 3b. No PostgreSQL 14+? Use SQLite (small teams)
+
+SQLite needs no database server. It is a reasonable choice for one company with a handful of HR users working at the same time;
+it is not meant for many simultaneous users. Do **not** set `DATABASE_URL`. Instead set these (in Setup Python App > Environment
+variables **and** `export` them in Terminal before running `manage.py` commands):
+
+```
+DB_ENGINE=django.db.backends.sqlite3
+DB_NAME=/home/CPUSER/hrm_data/horilla.sqlite3
+```
+
+```bash
+mkdir -p ~/hrm_data && chmod 700 ~/hrm_data
+```
+
+Keep the file **outside** the code folder and outside `public_html`. Back it up with `SQLITE_PATH` (section 10). Make sure the terminal and the
+website use the **same** `DB_NAME`: if you run `migrate` without the variables, Django silently creates a different file (`TestDB.sqlite3` in the app folder).
 
 ## 4. Get the code onto the server
 
@@ -104,7 +124,7 @@ In **Setup Python App** > your app > *Environment variables*, add each (no quote
 | `DB_INIT_PASSWORD` | another long random string (Horilla refuses to start in production without a real one) |
 | `ALLOWED_HOSTS` | `hr.demillerfarms.com` |
 | `CSRF_TRUSTED_ORIGINS` | `https://hr.demillerfarms.com` |
-| `DATABASE_URL` | the string from step 3 |
+| `DATABASE_URL` | the string from step 3 (PostgreSQL 14+ only; leave it **unset** for SQLite and set `DB_ENGINE`/`DB_NAME` instead) |
 | `TIME_ZONE` | `Africa/Lagos` |
 | `SECURE_SSL_REDIRECT` | `True` (after HTTPS works; set `False` for the very first test if needed) |
 | `PAYROLL_COMPANY_NAME` | optional, used in the default bank narration |
@@ -159,6 +179,12 @@ cPanel > **Cron Jobs** > add (daily at 02:10; set `MAILTO` so failures are email
 10 2 * * * DATABASE_URL='postgres://CPUSER_hrapp:PASSWORD@localhost:5432/CPUSER_horilla' BACKUP_DIR=$HOME/backups MEDIA_DIR=$HOME/horilla/media KEEP_DAYS=30 bash $HOME/horilla/scripts/backup.sh
 ```
 
+SQLite instead (the script needs `python3`; use the app's virtualenv python):
+
+```
+10 2 * * * PATH=/home/CPUSER/virtualenv/APPROOT/3.12/bin:$PATH SQLITE_PATH=$HOME/hrm_data/horilla.sqlite3 BACKUP_DIR=$HOME/backups KEEP_DAYS=30 bash $HOME/horilla/scripts/backup.sh
+```
+
 Then copy `~/backups` **off the server** regularly (another host, cloud storage, or your own computer). A backup that lives only
 on the same server does not survive losing the server. Test a restore once (runbook).
 The cPanel account backup is a useful extra, not a substitute.
@@ -197,6 +223,8 @@ production: test it on a staging copy first (runbook, "Upgrading").
 | "CSRF verification failed" | `CSRF_TRUSTED_ORIGINS` missing the `https://` origin |
 | "SECRET_KEY ... placeholder" / refuses to start | set real `SECRET_KEY`, `ALLOWED_HOSTS`, `DB_INIT_PASSWORD` |
 | `could not connect to server` | wrong `DATABASE_URL` (prefix, password encoding, host) |
+| `PostgreSQL 14 or later is required (found 10.x)` | the host's PostgreSQL is too old; use SQLite (section 3b), a newer database server, or a VPS |
+| Site works in the browser but data/users from Terminal are missing (or vice versa) | the terminal and the website use different databases; compare the `DATABASE_URL` / `DB_NAME` values in both |
 | Page unstyled | run `collectstatic`, restart |
 | Redirect loop after enabling HTTPS redirect | AutoSSL not active yet; set `SECURE_SSL_REDIRECT=False`, fix SSL, re-enable |
 | Changes not visible | restart the app after every code or environment change |

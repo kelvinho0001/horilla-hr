@@ -49,8 +49,18 @@ class Command(BaseCommand):
             add("WARN", "SECURE_SSL_REDIRECT is off; enable it once HTTPS works")
 
         engine = connection.vendor
-        add("OK" if engine == "postgresql" else "WARN", f"database engine: {engine}"
-            + ("" if engine == "postgresql" else " (PostgreSQL is what Horilla supports in production)"))
+        if engine == "postgresql":
+            add("OK", "database engine: postgresql")
+        elif engine == "sqlite":
+            from pathlib import Path
+
+            name = str(connection.settings_dict["NAME"])
+            add("WARN", "database engine: SQLite. Fine for a small team (a few HR users at a time); "
+                "back it up with scripts/backup.sh (SQLITE_PATH) and move to PostgreSQL 14+ if usage grows")
+            if str(settings.BASE_DIR) in str(Path(name).resolve()):
+                add("WARN", "the SQLite file is inside the code folder; keep it elsewhere (DB_NAME=/home/<user>/hrm_data/horilla.sqlite3)")
+        else:
+            add("WARN", f"database engine: {engine} (not supported by this setup)")
 
         tz = getattr(settings, "ATTENDANCE_TIMEZONE", "Africa/Lagos")
         add("OK", f"attendance day uses {tz}")
