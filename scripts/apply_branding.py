@@ -7,6 +7,7 @@ Replace the login logo and the browser-tab icons with your own, from ONE image.
 
 Writes (inside this repo, overwriting Horilla's):
     static/images/ui/auth-logo.png          login / error pages / emails logo (fits 400x140, transparent)
+    static/images/ui/horilla-sticker-round.png   logo used in e-mails sent by the system (900x900, transparent)
     static/favicons/favicon-16x16.png, favicon-32x32.png, apple-touch-icon.png (180),
     android-chrome-192x192.png, android-chrome-512x512.png, favicon.ico (16/32/48)
 
@@ -23,6 +24,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 FAV = ROOT / "static" / "favicons"
 LOGO = ROOT / "static" / "images" / "ui" / "auth-logo.png"
+EMAIL_LOGO = ROOT / "static" / "images" / "ui" / "horilla-sticker-round.png"
 
 
 def square(img, size):
@@ -51,6 +53,7 @@ def main():
     wide.thumbnail((400, 140), Image.LANCZOS)
     LOGO.parent.mkdir(parents=True, exist_ok=True)
     wide.save(LOGO)
+    square(icon, 900).save(EMAIL_LOGO)
     FAV.mkdir(parents=True, exist_ok=True)
     for name, size in (("favicon-16x16.png", 16), ("favicon-32x32.png", 32), ("apple-touch-icon.png", 180),
                        ("android-chrome-192x192.png", 192), ("android-chrome-512x512.png", 512)):

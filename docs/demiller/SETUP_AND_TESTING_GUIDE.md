@@ -164,7 +164,7 @@ two cycles match and the accountant has uploaded a generated file to the bank su
 
 ## 5. Login logo and favicon
 
-The login page, error pages, emails and payslip PDFs take the logo from **`static/images/ui/auth-logo.png`**; the browser-tab icon comes from **`static/favicons/`**.
+The login page, error pages and payslip PDFs take the logo from **`static/images/ui/auth-logo.png`**; e-mails sent by the system use **`static/images/ui/horilla-sticker-round.png`**; the browser-tab icon comes from **`static/favicons/`**.
 Replacing those files is the reliable method on cPanel (uploading a logo in Horilla's company screen stores it in `media/`, which Django does not serve there).
 
 **You need:** your logo as a **PNG** (transparent background if possible, at least 512 px on the longer side). Optionally a separate **square** icon for the tab.
@@ -179,7 +179,7 @@ python manage.py collectstatic --noinput
 ```
 Then **Restart** the app in Setup Python App and hard-refresh the browser (**Ctrl+F5**; browsers cache favicons for a long time. If the old icon persists, open the site in a private window).
 
-What the script writes: `auth-logo.png` (fitted to 400x140, transparent), `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` (180),
+What the script writes: `auth-logo.png` (fitted to 400x140, transparent), `horilla-sticker-round.png` (e-mail logo, 900x900), `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` (180),
 `android-chrome-192x192.png`, `android-chrome-512x512.png`, `favicon.ico`.
 
 **Name instead of "Horilla":** `WHITE_LABELLING = True` is set in `horilla/settings/local_settings.py`, so the tab title, login page and emails use your **company name** (from Settings > Company, head-office company), and no longer say "Horilla". Restart after pulling.
