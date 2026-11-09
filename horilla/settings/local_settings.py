@@ -23,3 +23,7 @@ Examples:
 from .base import INSTALLED_APPS  # noqa: E402
 
 INSTALLED_APPS += ["biometric_integration", "attendance_processing", "weekly_payroll", "bank_export"]
+
+# Show the company's name (instead of "Horilla") in tab titles, the login page and e-mails.
+# The logo and favicon are replaced with scripts/apply_branding.py (static files; works on cPanel without /media).
+WHITE_LABELLING = True

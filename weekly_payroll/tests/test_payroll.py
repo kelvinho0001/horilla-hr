@@ -417,3 +417,46 @@ class RoleTests(Base):
         })
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(PayrollRun.objects.get(name="Oct").lines.count(), 1)
+
+
+class SampleSheetTests(Base):
+    """Reproduces the four workers of Demiller's PAYROLL_TEMPLATE_1.xlsx with the agreed formula."""
+
+    SAMPLE = [
+        # badge, weekly present days, working days, basic, fines, IOU, expected
+        ("SE001", [3, 5, 6, 1], 28, "70000", "5000", "20000", "12500.00"),
+        ("SE002", [4, 5, 4, 6], 28, "55000", "4500", "15000", "17821.43"),
+        ("SE003", [6, 2, 5, 6], 28, "70000", "2300", "23000", "22200.00"),
+        ("SE004", [6, 6, 6, 6], 24, "70000", "0", "0", "70000.00"),
+    ]
+
+    def test_sample_sheet_reconciles(self):
+        start = date(2024, 10, 7)  # a Monday; four 7-day blocks = 28 days
+        user = self.user()
+        workers = {}
+        for badge, weeks, wd, basic, fine, iou, _exp in self.SAMPLE:
+            e = self.worker(basic, badge=badge)
+            workers[badge] = e
+            for w, n in enumerate(weeks):
+                for i in range(n):
+                    DailyAttendance.objects.create(
+                        employee=e, date=start + timedelta(7 * w + i), status="present", approval=self.approval
+                    )
+            if D(fine):
+                f = Fine.objects.create(employee=e, description="Fine", amount=D(fine), date_issued=start)
+                services.approve_fine(f, user)
+            if D(iou):
+                self.loan(e, iou, "monthly", iou, first=start + timedelta(10))
+        r = PayrollRun.objects.create(
+            name="Sample", start_date=start, end_date=start + timedelta(27), default_working_days=28
+        )
+        services.generate(r)
+        services.set_working_days(self.line(r, workers["SE004"]), 24)
+        for badge, weeks, wd, basic, fine, iou, expected in self.SAMPLE:
+            line = self.line(r, workers[badge])
+            self.assertEqual(line.week_days, weeks, badge)
+            self.assertEqual(line.total_days, sum(weeks), badge)
+            self.assertEqual((line.fines, line.iou), (D(fine), D(iou)), badge)
+            self.assertEqual(line.amount_earned, D(expected), badge)
+        r.refresh_from_db()
+        self.assertEqual(r.total_net, D("122521.43"))
