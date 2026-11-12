@@ -61,7 +61,7 @@ class RuleResolver:
     """Most specific active rule: employee > category > department > shift > global."""
 
     def __init__(self):
-        self.rules = list(AttendanceRule.objects.filter(is_active=True))
+        self.rules = list(AttendanceRule.objects.filter(is_active=True).prefetch_related("windows"))
 
     def for_employee(self, emp):
         wi = getattr(emp, "employee_work_info", None)
@@ -177,7 +177,7 @@ def process_range(start, end, employees=None):
         joined = getattr(wi, "date_joining", None)
         left = getattr(wi, "contract_end_date", None)
         rule = rules.for_employee(emp)
-        window = (rule.window_start, rule.window_end) if rule and rule.window_start else None
+        window = rule.window_list() if rule else []
         weekdays = rule.weekday_set() if rule else FALLBACK_WEEKDAYS
         for d in calculators.daterange(start, end):
             if (joined and d < joined) or (left and d > left):

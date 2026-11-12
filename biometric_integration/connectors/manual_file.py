@@ -126,6 +126,15 @@ def _read_rows(file_obj, filename):
     raise ConnectorError("Unsupported file type. Upload a .csv or .xlsx file.")
 
 
+SERIAL_RE = re.compile(r"([A-Za-z0-9]+)_attlog", re.IGNORECASE)
+
+
+def device_serial_from_filename(filename):
+    """'AEYU200860006_attlog.dat' -> 'AEYU200860006' (the device's serial number), else ''."""
+    m = SERIAL_RE.search(filename or "")
+    return m.group(1) if m else ""
+
+
 class ManualFileConnector(BaseConnector):
     provider_type = "manual_file"
     capabilities = frozenset({FETCH_TRANSACTIONS})
@@ -142,8 +151,43 @@ class ManualFileConnector(BaseConnector):
                     break
         return found
 
+    def parse_attlog_dat(self, file_obj, filename):
+        """
+        ZKTeco attendance file copied from the device by USB (``<serial>_attlog.dat``): tab-separated, no
+        header: ID, "YYYY-MM-DD HH:MM:SS", then four device codes that attendance does not need
+        (kept in the raw record). IDs are space-padded; blank lines are ignored.
+        """
+        raw = file_obj.read()
+        text = raw.decode("utf-8-sig", errors="replace") if isinstance(raw, bytes) else raw
+        serial = device_serial_from_filename(filename)
+        txns, errors = [], []
+        for n, line in enumerate(text.splitlines(), start=1):
+            if not line.strip():
+                continue
+            parts = line.split("\t")
+            emp = parts[0].strip() if parts else ""
+            if len(parts) < 2 or not emp:
+                errors.append(RowError(n, "Not an attendance line (expected ID<TAB>date time)"))
+                continue
+            try:
+                stamp = _parse_datetime(parts[1])
+            except ValueError as exc:
+                errors.append(RowError(n, f"Invalid timestamp: {exc}"))
+                continue
+            rawdata = {f"field{i}": v.strip() for i, v in enumerate(parts[2:], start=3)}
+            if serial:
+                rawdata["device_serial"] = serial
+            # The device identity is the provider (one provider per device); the serial lives in the raw record only,
+            # so a renamed copy of the same file still de-duplicates.
+            txns.append(NormalizedTransaction(external_employee_id=emp, timestamp=stamp, raw=rawdata))
+        if not txns and not errors:
+            raise ConnectorError("The file is empty.")
+        return txns, errors
+
     def parse(self, file_obj, filename):
         """Return (transactions, errors). Row numbers are 1-based file rows."""
+        if (filename or "").lower().endswith(".dat"):
+            return self.parse_attlog_dat(file_obj, filename)
         rows = _read_rows(file_obj, filename)
         rows = [r for r in rows if any(str(c).strip() for c in r if c is not None)]
         if not rows:

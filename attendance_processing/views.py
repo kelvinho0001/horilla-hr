@@ -14,7 +14,7 @@ from employee.models import Employee
 from horilla.decorators import login_required, permission_required
 
 from . import calculators, services
-from .forms import RuleForm
+from .forms import RuleForm, WindowFormSet
 from .models import (
     STATUS_CHOICES, UNRESOLVED, AttendanceApproval, AttendanceRule, DailyAttendance,
     CORRECTABLE,
@@ -240,7 +240,7 @@ def day_detail(request, employee_id, day):
 @permission_required("attendance_processing.view_attendancerule")
 def rule_list(request):
     return render(request, T + "rules.html", {
-        "rules": AttendanceRule.objects.all(),
+        "rules": AttendanceRule.objects.prefetch_related("windows"),
         "can_edit": request.user.has_perm("attendance_processing.add_attendancerule"),
     })
 
@@ -250,8 +250,14 @@ def rule_list(request):
 def rule_form(request, pk=None):
     rule = get_object_or_404(AttendanceRule, pk=pk) if pk else None
     form = RuleForm(request.POST or None, instance=rule)
+    formset = WindowFormSet(request.POST or None, instance=rule or AttendanceRule())
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, _("Rule saved. Re-process attendance to apply it."))
-        return redirect("att-proc-rules")
-    return render(request, T + "rule_form.html", {"form": form})
+        saved = form.save(commit=False)
+        formset = WindowFormSet(request.POST, instance=saved)
+        if formset.is_valid():
+            saved.save()
+            formset.instance = saved
+            formset.save()
+            messages.success(request, _("Rule saved. Re-process attendance to apply it."))
+            return redirect("att-proc-rules")
+    return render(request, T + "rule_form.html", {"form": form, "formset": formset})

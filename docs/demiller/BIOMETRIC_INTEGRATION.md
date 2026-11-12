@@ -7,6 +7,9 @@ Nothing here touches payroll or Horilla's `Attendance`; Phase 3 reads `RawTransa
 Attendance > **Biometric Import** (`/biometric-integration/`): upload a CSV/XLSX report, review import history,
 fix **Unmapped IDs**, manage **Mappings**. Providers are created in Django admin; "Manual upload" is created automatically.
 
+## Device file (`<serial>_attlog.dat`) and user list (`user.dat`)
+The USB attendance file is tab-separated, no header: `ID<TAB>YYYY-MM-DD HH:MM:SS<TAB>4 device codes`; the serial in the file name selects the device (provider). `user.dat` (72-byte user records) feeds **Worker sheet**, which builds the Excel file for Horilla's Employees > Import. Unmapped IDs can be mapped in bulk (exact Badge ID match) or ignored with a reason.
+
 ## Report format (manual upload)
 Header row required. Employee ID column (e.g. `Emp ID`, `User ID`, `Emp Code`) plus either one date-time column or separate
 `Date` + `Time` columns. Dates are day-first (dd/mm/yyyy) or ISO. Other columns are kept in `original_data`.

@@ -1,4 +1,10 @@
 {% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "attendance_processing/_nav.html" %}
 <h2>{% trans "Attendance rule" %}</h2>
-<form method="post">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></form>
+<form method="post">{% csrf_token %}{{ form.as_p }}
+<h3>{% trans "Attendance windows" %}</h3>
+<p>{% trans "A punch counts as attendance only when its time falls inside one of these windows (e.g. 00:00-09:00 for the night shift and 14:00-20:00 for the afternoon shift). Leave all empty to accept any time. Punches in two different windows on one day are sent to review. A window cannot cross midnight: use two." %}</p>
+{{ formset.management_form }}{{ formset.non_form_errors }}
+<table>{% for f in formset %}<tr><td>{{ f.id }}{{ f.start.errors }}{{ f.start }}</td><td>{% trans "to" %}</td><td>{{ f.end.errors }}{{ f.end }}</td><td>{% if f.instance.pk %}{{ f.DELETE }} {% trans "remove" %}{% endif %}{{ f.non_field_errors }}</td></tr>{% endfor %}</table>
+<p>{% trans "Need a third window? Save, then edit the rule again for more empty rows." %}</p>
+<button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></form>
 </section>{% endblock %}

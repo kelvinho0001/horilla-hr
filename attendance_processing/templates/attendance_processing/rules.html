@@ -2,7 +2,7 @@
 <h2>{% trans "Attendance rules" %}</h2>
 {% if can_edit %}<a class="oh-btn oh-btn--secondary" href="{% url 'att-proc-rule-new' %}">{% trans "Add rule" %}</a>{% endif %}
 <p>{% trans "Most specific rule wins: employee, worker category, department, shift, then everyone. With no rule, any punch counts and Monday–Saturday are working days." %}</p>
-<table class="oh-table" style="width:100%"><thead><tr><th>{% trans "Name" %}</th><th>{% trans "Scope" %}</th><th>{% trans "Window" %}</th><th>{% trans "Working weekdays (Mon=0)" %}</th><th>{% trans "Active" %}</th></tr></thead>
-{% for r in rules %}<tr><td>{% if can_edit %}<a href="{% url 'att-proc-rule-edit' r.pk %}">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}</td><td>{{ r.get_scope_display }} {{ r.department|default:"" }}{{ r.shift|default:"" }}{{ r.employee_type|default:"" }}{{ r.employee|default:"" }}</td><td>{{ r.window_start|time:"H:i"|default:"any" }} – {{ r.window_end|time:"H:i"|default:"any" }}</td><td>{{ r.working_weekdays }}</td><td>{{ r.is_active }}</td></tr>
+<table class="oh-table" style="width:100%"><thead><tr><th>{% trans "Name" %}</th><th>{% trans "Scope" %}</th><th>{% trans "Windows" %}</th><th>{% trans "Working weekdays (Mon=0)" %}</th><th>{% trans "Active" %}</th></tr></thead>
+{% for r in rules %}<tr><td>{% if can_edit %}<a href="{% url 'att-proc-rule-edit' r.pk %}">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}</td><td>{{ r.get_scope_display }} {{ r.department|default:"" }}{{ r.shift|default:"" }}{{ r.employee_type|default:"" }}{{ r.employee|default:"" }}</td><td>{% for w in r.windows.all %}{{ w.start|time:"H:i" }}–{{ w.end|time:"H:i" }}{% if not forloop.last %}, {% endif %}{% empty %}{% trans "any time" %}{% endfor %}</td><td>{{ r.working_weekdays }}</td><td>{{ r.is_active }}</td></tr>
 {% empty %}<tr><td colspan="5">{% trans "No rules." %}</td></tr>{% endfor %}</table>
 </section>{% endblock %}

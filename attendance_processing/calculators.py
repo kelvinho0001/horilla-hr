@@ -1,25 +1,38 @@
 """Pure functions (no database): easy to test and reused by payroll later."""
 
-from datetime import timedelta
+from datetime import time, timedelta
 
 from .models import ABSENT, HOLIDAY, LEAVE, MISSING, PRESENT, REST, REVIEW  # noqa: F401
+
+
+def _windows(window):
+    """Accept None, one (start, end) pair, or a list of pairs."""
+    if not window:
+        return []
+    if isinstance(window[0], time):
+        return [tuple(window)]
+    return [tuple(w) for w in window]
 
 
 def classify(punch_times, *, window, working_weekday, is_holiday, on_leave):
     """
     Decide one day's status from the local times of that day's punches.
 
-    ``window`` is (start, end) or None. Several punches never mean several
-    days: any number of in-window punches is still one PRESENT.
-    Returns (status, flags).
+    ``window`` is None, a (start, end) pair or a list of pairs (e.g. night and afternoon shift).
+    Several punches never mean several days: any number of in-window punches is still one
+    PRESENT. But in-window punches in two *different* windows (two shifts in one day) go to
+    review instead of being counted silently. Returns (status, flags).
     """
     flags = []
+    windows = _windows(window)
     if punch_times:
         if len(punch_times) > 1:
             flags.append("multiple_punches")
-        in_window = [
-            t for t in punch_times if window is None or window[0] <= t <= window[1]
-        ]
+        in_window = [t for t in punch_times if not windows or any(a <= t <= b for a, b in windows)]
+        used = {i for t in in_window for i, (a, b) in enumerate(windows) if a <= t <= b}
+        if len(used) > 1:
+            flags.append("two_shifts_same_day")
+            return REVIEW, flags
         if in_window:
             if is_holiday or not working_weekday:
                 flags.append("worked_on_non_working_day")

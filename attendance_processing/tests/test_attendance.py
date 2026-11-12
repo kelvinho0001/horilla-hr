@@ -157,8 +157,10 @@ class ProcessingTests(Base):
     def test_rule_specificity_and_window(self):
         d = Department.objects.create(department="Packing")
         a, b = self.emp(department=d), self.emp()
-        AttendanceRule.objects.create(name="all", scope="global", window_start=time(15), window_end=time(17), working_weekdays="0,1,2,3,4,5,6")
-        AttendanceRule.objects.create(name="pack", scope="department", department=d, window_start=time(9), window_end=time(11), working_weekdays="0,1,2,3,4,5")
+        g = AttendanceRule.objects.create(name="all", scope="global", working_weekdays="0,1,2,3,4,5,6")
+        g.windows.create(start=time(15), end=time(17))
+        k = AttendanceRule.objects.create(name="pack", scope="department", department=d, working_weekdays="0,1,2,3,4,5")
+        k.windows.create(start=time(9), end=time(11))
         for e in (a, b):
             self.punch(e, at(MON, 10))
         services.process_range(MON, MON + timedelta(6), [a, b])
@@ -319,3 +321,73 @@ class RoleAndViewTests(Base):
         self.assertEqual(self.status(self.e, d), "missing")
         self.client.post(reverse("att-proc-correct"), {"employee": self.e.pk, "date": str(d), "status": "present", "reason": "seen"})
         self.assertEqual(self.status(self.e, d), "present")
+
+
+class TwoWindowTests(Base):
+    """Contract staff: night shift punches ~00:00-09:00, afternoon shift ~14:00-20:00."""
+
+    def rule(self):
+        r = AttendanceRule.objects.create(name="contract", scope="global", working_weekdays="0,1,2,3,4,5,6")
+        r.windows.create(start=time(0, 0), end=time(9, 0))
+        r.windows.create(start=time(14, 0), end=time(20, 0))
+        return r
+
+    def test_either_shift_counts_as_present(self):
+        self.rule()
+        e, f = self.emp(), self.emp()
+        self.punch(e, at(MON, 4, 52))      # night shift
+        self.punch(f, at(MON, 16, 26))     # afternoon shift
+        services.process_range(MON, MON, [e, f])
+        self.assertEqual(self.status(e, MON), "present")
+        self.assertEqual(self.status(f, MON), "present")
+
+    def test_punch_between_windows_needs_review(self):
+        self.rule()
+        e = self.emp()
+        self.punch(e, at(MON, 11, 0))
+        services.process_range(MON, MON, [e])
+        self.assertEqual(self.status(e, MON), "review")
+
+    def test_double_punch_inside_one_window_is_still_one_day(self):
+        self.rule()
+        e = self.emp()
+        self.punch(e, at(MON, 16, 26))
+        self.punch(e, at(MON, 16, 27))
+        services.process_range(MON, MON, [e])
+        self.assertEqual(self.status(e, MON), "present")
+
+    def test_two_shifts_on_one_date_goes_to_review_not_silently_one_day(self):
+        self.rule()
+        e = self.emp()
+        self.punch(e, at(MON, 7, 42))
+        self.punch(e, at(MON, 14, 35))
+        services.process_range(MON, MON, [e])
+        row = DailyAttendance.objects.get(employee=e, date=MON)
+        self.assertEqual(row.status, "review")
+        self.assertIn("two_shifts_same_day", row.flags)
+
+    def test_calculator_accepts_list_single_pair_and_none(self):
+        w = [(time(0), time(9)), (time(14), time(20))]
+        self.assertEqual(calculators.classify([time(16)], window=w, working_weekday=True, is_holiday=False, on_leave=False)[0], "present")
+        self.assertEqual(calculators.classify([time(16)], window=(time(14), time(20)), working_weekday=True, is_holiday=False, on_leave=False)[0], "present")
+        self.assertEqual(calculators.classify([time(11)], window=None, working_weekday=True, is_holiday=False, on_leave=False)[0], "present")
+
+    def test_rule_page_saves_windows_and_rejects_overlap(self):
+        permissions.sync_groups()
+        user = make_employee(company=self.company, email="appr@x.test").employee_user_id
+        user.is_new_employee = False
+        user.save()
+        CompanyGroupAssignment.objects.create(user=user, company=self.company, group=Group.objects.get(name="HR/Payroll Approver"))
+        self.client.force_login(user)
+        base = {"name": "contract", "scope": "global", "working_weekdays": "0,1,2,3,4,5", "is_active": "on",
+                "windows-TOTAL_FORMS": "2", "windows-INITIAL_FORMS": "0", "windows-MIN_NUM_FORMS": "0", "windows-MAX_NUM_FORMS": "1000"}
+        bad = {**base, "windows-0-start": "00:00", "windows-0-end": "09:00", "windows-1-start": "08:00", "windows-1-end": "12:00"}
+        r = self.client.post(reverse("att-proc-rule-new"), bad)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(AttendanceRule.objects.count(), 0)
+        good = {**base, "windows-0-start": "00:00", "windows-0-end": "09:00", "windows-1-start": "14:00", "windows-1-end": "20:00"}
+        r = self.client.post(reverse("att-proc-rule-new"), good)
+        self.assertEqual(r.status_code, 302)
+        rule = AttendanceRule.objects.get()
+        self.assertEqual([(str(a), str(b)) for a, b in rule.window_list()], [("00:00:00", "09:00:00"), ("14:00:00", "20:00:00")])
+        self.assertContains(self.client.get(reverse("att-proc-rules")), "14:00–20:00")

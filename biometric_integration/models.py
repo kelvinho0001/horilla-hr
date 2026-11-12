@@ -204,3 +204,21 @@ class RawTransaction(models.Model):
 
     def __str__(self):
         return f"{self.external_employee_id} @ {self.attendance_timestamp:%Y-%m-%d %H:%M}"
+
+
+class IgnoredExternalID(models.Model):
+    """An ID that shows up in punches but is deliberately not a payroll worker (admin staff, test punches)."""
+
+    provider = models.ForeignKey(ProviderConfig, on_delete=models.CASCADE, related_name="ignored_ids")
+    external_employee_id = models.CharField(max_length=100)
+    reason = models.CharField(max_length=255)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["provider", "external_employee_id"], name="uniq_ignored_id_per_provider")
+        ]
+
+    def __str__(self):
+        return f"{self.provider} {self.external_employee_id} (ignored)"

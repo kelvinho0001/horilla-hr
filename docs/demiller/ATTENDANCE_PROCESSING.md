@@ -10,7 +10,7 @@ Raw punches (`biometric_integration.RawTransaction`) -> `DailyAttendance` (one r
   Missing/Review block approval until HR resolves them (correction, or "mark all missing as absent" with a reason).
 - Future dates are never marked. Days before joining / after contract end are skipped.
 - Leave = approved Horilla leave requests. Holidays = Horilla `Holidays` (incl. department/position/employee-specific).
-- `AttendanceRule`: window and working weekdays per employee > worker category > department > shift > everyone.
+- `AttendanceRule`: one or more **windows** (time ranges, e.g. 00:00-09:00 and 14:00-20:00) and working weekdays, per employee > worker category > department > shift > everyone. A punch counts only inside a window; a day with punches in two different windows goes to review (two shifts in one day).
   Nothing is hard-coded; with no rule any punch counts and Mon-Sat are working days (assumption, change via a global rule).
 - Only employees with an active, verified biometric mapping are processed.
 

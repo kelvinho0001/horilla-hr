@@ -28,41 +28,48 @@ Plain-language guide for the person running the system. Server steps are in `DEP
 ## 2. Employees and biometric IDs
 
 ### The rule
-**Horilla is the master list of workers.** Time.Net / BioTime / the device only supply attendance punches. Nothing is created in
-Horilla from a punch, and nothing in Horilla overwrites the device.
+**Horilla is the master list of workers.** The devices (and Time.Net) only supply attendance punches and, at most, names. Nothing is
+created in Horilla from a punch, and nothing in Horilla overwrites the device.
 
-### Step A: put the workers in Horilla
-**Option 1, Excel/CSV import (best for many workers).** In Horilla open **Employees**, use the **Import** action (it also offers a template download).
-The file needs these columns (header names exactly):
+### Your devices (from the sample files)
+| Device | Serial (in the file name) | Who | Pattern |
+|---|---|---|---|
+| Contract staff | `AEYU200860006` | casual/contract workers, IDs `SE###` | one punch per shift: night shift ~00:00-09:00 (mostly 04:00-05:00), afternoon shift ~14:00-20:00 |
+| Admin staff | `AEYU200860012` | office staff (IDs `DF…`, `DMF…`, numbers) | in ~08:00, out ~18:00. **Not imported into Horilla for now** |
 
-`Badge ID, First Name, Last Name, Email, Phone, Gender, Department, Job Position, Job Role, Shift, Work Type, Reporting Manager, Employee Type, Location, Date Joining, Basic Salary, Salary Hour, CTC, Contract End Date, Company`
+IDs are only unique **within** a device, so each device is its own source in Horilla (a file named `<serial>_attlog.dat` creates and
+uses "Device <serial>" automatically; rename it in Django admin if you like).
 
-* **Badge ID = the worker's biometric user ID** (the number/ID that appears in Time.Net and on the device). This is what makes the next step automatic.
-* Departments, employee types (worker category, e.g. *Casual*), job positions, shifts and work types that do not exist yet are **created by the import**.
-* **Company** must be the exact name of your company in Horilla.
-* **Email must be unique** (it is the login name). Casual workers who have no email: use a placeholder such as `se045@demillerindustries.com`; imported accounts get a random password, so they cannot log in, which is fine: they never use the system.
-* Date Joining matters: attendance before it is ignored. Contract End Date matters: attendance after it is ignored.
-* The import reports how many succeeded and gives a downloadable error file for rows that failed.
+### Getting attendance in (no Time.Net needed)
+1. At the device: copy the attendance file to a USB drive (it is named `<serial>_attlog.dat`).
+2. **Attendance > Biometric Import > Upload report**: choose the `.dat` file. (For a file you renamed, pick the device in the list.)
+3. Uploading the same file again, or a newer file that contains the old records too, is safe: only new punches are added.
+Each line is `ID, date-time` plus four device codes that attendance does not use (they are kept in the raw record).
 
-I tested this import with the file made by `scripts/make_test_attendance.py` (4 workers created with their departments and category).
-**Option 2, one at a time:** Employees > Create (set **Badge ID** under work information).
+### Putting the workers in Horilla (one time, then for new starters)
+1. Copy `user.dat` (the user list) from the contract device to USB.
+2. **Attendance > Biometric Import > Worker sheet**: upload `user.dat`. Optional: the employee list exported from Time.Net (CSV/Excel with an ID column, name columns and a Department column): it supplies full names and **the department** (the device has none).
+   * Company: pick yours. Fill the defaults that apply to everyone (job position, role, worker category such as *Casual*, date joining).
+   * **IDs to leave out:** the device's own admin and office staff (e.g. `1`, `104`).
+3. You get `workers-to-import.xlsx` with three sheets:
+   * **WORKERS**: exactly Horilla's import format. The device name `FIRST.LAST` is split into first and last name; the ID becomes the **Badge ID**; workers without an e-mail get a placeholder `id@workers.invalid` and a placeholder phone number (the system needs them; replace later if you want real ones). Fix names and fill in departments here.
+   * **REVIEW**: things to check for each worker: same name twice (one person with two IDs?), same name as an existing employee, a name with no surname or an extra full stop, IDs with no punches yet, device privilege levels.
+   * **NOT INCLUDED**: IDs left out or already in Horilla, **IDs that punched but are not on the device user list** (e.g. leftovers from deleted users or tests), and Time.Net employees not on this device.
+4. **Employees > Import** with the WORKERS sheet. Horilla itself refuses a Badge ID that already exists, so running it twice cannot create duplicates.
+5. Nothing is created until you do step 4.
 
-### Step B: link the biometric IDs
-1. **Attendance > Biometric Import > Upload report**: upload the weekly Time.Net export (CSV/Excel with an employee-ID column and date/time columns).
-2. Open **Unmapped IDs**. Every ID that appeared in the file but is not linked to a worker is listed, with a **suggested worker when the ID equals a Badge ID exactly**. Click **Map** to confirm. Earlier punches from that ID attach automatically.
-3. IDs that appear here but have **no** worker in Horilla are workers you forgot to add: add them in Horilla, then map.
-4. **Names are never used to match** (two workers can share a name).
-5. **Mappings** lists everything linked; a wrong link can be deactivated and redone. One ID can belong to only one worker per source.
-
-**If Time.Net's IDs differ from your Badge IDs** (e.g. Time.Net uses `1, 2, 3`, Horilla uses `SE001`): map them by hand once (Mappings > Add mapping). Mapping is per ID, one click each; a bulk "map all" or a mapping-by-file tool can be added if you have many (ask).
+### Linking IDs to workers
+1. After an upload, open **Unmapped IDs**. A worker is suggested when the ID equals a Badge ID **exactly** (names are never used).
+2. **Map all matching IDs** links every suggested one in one click. Earlier punches of those IDs attach to the worker too.
+3. Anything else: **Map** one by one, or **Ignore** (with a reason) for IDs that are not payroll workers: admin staff, test punches, leftovers. Ignored IDs keep their punches but stop being listed and are not counted as unmapped.
+4. One worker can have several IDs (map each). One ID belongs to one worker per device.
 
 ### New starters and leavers
-* **New worker:** add to Horilla first (same ID as on the device) > they appear in the next upload > map.
-* **Leaver:** set the Contract End Date (later punches are ignored) or archive the employee, and deactivate the mapping.
+* **New worker:** add in Horilla first (Badge ID = the ID on the device); enrol on the device and in Time.Net with the same ID; after the next upload, map.
+* **Leaver:** set the Contract End Date (later punches are ignored) or archive the worker, and deactivate the mapping.
 
-### What about syncing from Time.Net or BioTime?
-Not built yet (see section 6). When Time.Net can export its **user list** to Excel, that file can be converted into the Horilla import above;
-send me a sample and I can prepare the converter. A BioTime connector (employee list + punches by API) is designed to *list* BioTime employees for you to confirm against Horilla; it will not create or change workers on its own.
+### Time.Net / BioTime connectors
+Not needed for this workflow and not built (see section 6). The USB file is the supported path today; an automatic upload from the office PC can be added later.
 
 ---
 
@@ -74,10 +81,10 @@ Menu names can differ slightly by Horilla version.
 |---|---|---|
 | 1 | Settings > Company | Company name (shown on the login page and tab title) and details. Mark it as the head-office company. |
 | 2 | Run `python manage.py demiller_check` | 0 failures. Warnings: read them. |
-| 3 | Employees > Import | Workers with Badge ID = biometric ID (section 2). Departments and worker categories come with it. |
+| 3 | Biometric Import > Worker sheet, then Employees > Import | Workers with Badge ID = biometric ID (section 2). Departments and worker categories come with it. |
 | 4 | Leave / Attendance > Holidays | Public holidays, and leave types if you use leave. Approved leave and holidays are not counted as "missing". |
 | 5 | Settings > Roles and Permissions | Create logins for staff (they are Employees with an email) and add each to **one** group: **HR Officer**, **HR/Payroll Approver**, **Management**, **Accountant**, **IT Administrator**. Make sure the assignment is **for your company** (Horilla applies group rights per company). Keep the approver and Management groups small. |
-| 6 | Attendance > Weekly Attendance Review > Rules | A global rule: the attendance window (e.g. around 4 pm: start 15:00, end 17:00 if that is the real window) and working weekdays (Mon=0 ... Sun=6). Add department rules only where they differ. With **no** rule any punch counts and Mon-Sat are working days. |
+| 6 | Attendance > Weekly Attendance Review > Rules | A global rule with the **attendance windows** and working weekdays (Mon=0 ... Sun=6). A rule can have several windows. For the contract device use two: **00:00-09:00** (night shift) and **14:00-20:00** (afternoon shift). A punch outside both goes to review; a worker with a punch in both windows on one date also goes to review (nobody should work two shifts in a day). Add department rules only where they differ. With **no** rule any punch counts and Mon-Sat are working days. |
 | 7 | Attendance > Biometric Import | Upload a real week, map IDs. |
 | 8 | Payroll > Bank Export > Bank list | Already loaded (87 banks). Check `044` shows its zero. |
 | 9 | Payroll > Bank Export > Worker bank accounts | Each worker: pick the bank from the drop-down and enter the 10-digit account number. Everyone shows OK before an export. |
@@ -190,8 +197,7 @@ What the script writes: `auth-logo.png` (fitted to 400x140, transparent), `horil
 
 ## 6. What is not built yet
 
-* **Time.Net / BioTime / direct-device connectors and employee sync.** Needs the on-site facts in `SITE_CHECKLIST.md` (Time.Net version/database/export options, whether the device answers over the network, whether the server can reach it). Until then the supported path is **manual CSV/Excel upload**, which works today.
-* **Bulk mapping of biometric IDs** (map-all button or mapping-by-file). Mapping is one click per ID today.
+* **Time.Net / BioTime / direct-device connectors.** Needs the on-site facts in `SITE_CHECKLIST.md`. Until then the supported path is uploading the device's `.dat` file (or CSV/Excel), which works today.
 * **Automatic bank payment.** The system only produces the Excel file.
 * **An "un-approve payroll" button.** Approved payroll is locked on purpose (see the runbook for how corrections are handled).
 * **Horilla's own background jobs on cPanel** (see DEPLOYMENT.md section 11).

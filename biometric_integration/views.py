@@ -2,7 +2,7 @@ import hashlib
 
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, OuterRef, Q, Exists
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
@@ -11,15 +11,17 @@ from horilla.decorators import login_required, permission_required
 
 from .connectors.base import ConnectorError
 from .connectors.registry import get_connector
-from .forms import MappingForm, UploadForm
+from .forms import MappingForm, UploadForm, WorkerSheetForm
 from .models import (
     PROVIDER_MANUAL_FILE,
     ExternalEmployeeMapping,
+    IgnoredExternalID,
     ImportBatch,
     ProviderConfig,
     RawTransaction,
 )
-from .services import attendance_sync, employee_mapping
+from .connectors.manual_file import device_serial_from_filename
+from .services import attendance_sync, employee_mapping, worker_sheet
 
 T = "biometric_integration/"
 
@@ -46,6 +48,8 @@ def dashboard(request):
     }
     unmapped_ids = (
         RawTransaction.objects.filter(employee__isnull=True)
+        .exclude(Exists(IgnoredExternalID.objects.filter(
+            provider_id=OuterRef("provider_id"), external_employee_id=OuterRef("external_employee_id"))))
         .values("external_employee_id")
         .distinct()
         .count()
@@ -71,8 +75,17 @@ def dashboard(request):
 def upload(request):
     form = UploadForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
-        provider = form.cleaned_data["provider"] or _default_manual_provider()
         f = form.cleaned_data["file"]
+        provider = form.cleaned_data["provider"]
+        if provider is None:
+            serial = device_serial_from_filename(f.name)
+            if serial:
+                # One source per device: IDs are only unique within a device, so punches from different devices never mix.
+                provider, _c = ProviderConfig.objects.get_or_create(
+                    name=f"Device {serial}", defaults={"provider_type": PROVIDER_MANUAL_FILE}
+                )
+            else:
+                provider = _default_manual_provider()
         data = f.read()
         digest = hashlib.sha256(data).hexdigest()
         import io
@@ -95,8 +108,8 @@ def upload(request):
             )
         messages.success(
             request,
-            _("%(n)s new transactions imported, %(d)s duplicates skipped.")
-            % {"n": batch.imported_count, "d": batch.duplicate_count},
+            _("%(p)s: %(n)s new transactions imported, %(d)s duplicates skipped.")
+            % {"p": provider.name, "n": batch.imported_count, "d": batch.duplicate_count},
         )
         return redirect("bio-int-batch-detail", pk=batch.pk)
     return render(request, T + "upload.html", {"form": form})
@@ -170,8 +183,78 @@ def mapping_deactivate(request, pk):
 @login_required
 @permission_required("biometric_integration.view_externalemployeemapping")
 def unmapped_list(request):
-    sections = [
-        {"provider": p, "rows": employee_mapping.unmapped_summary(p)}
-        for p in ProviderConfig.objects.filter(is_active=True)
-    ]
-    return render(request, T + "unmapped_list.html", {"sections": sections})
+    sections = []
+    for p in ProviderConfig.objects.filter(is_active=True):
+        rows = employee_mapping.unmapped_summary(p)
+        sections.append({
+            "provider": p, "rows": rows,
+            "suggested": sum(1 for r in rows if r["suggestion"]),
+            "ignored": IgnoredExternalID.objects.filter(provider=p),
+        })
+    return render(request, T + "unmapped_list.html", {
+        "sections": sections, "can_map": request.user.has_perm("biometric_integration.add_externalemployeemapping"),
+    })
+
+
+@login_required
+@permission_required("biometric_integration.add_externalemployeemapping")
+@require_POST
+def map_all(request, provider_id):
+    provider = get_object_or_404(ProviderConfig, pk=provider_id)
+    mapped, skipped = employee_mapping.map_all_suggested(provider)
+    messages.success(request, _("%(m)s IDs mapped to the worker with the same Badge ID; %(s)s skipped.") % {"m": mapped, "s": skipped})
+    return redirect("bio-int-unmapped")
+
+
+@login_required
+@permission_required("biometric_integration.add_externalemployeemapping")
+@require_POST
+def ignore_id(request, provider_id):
+    provider = get_object_or_404(ProviderConfig, pk=provider_id)
+    try:
+        employee_mapping.ignore_id(provider, request.POST.get("external_employee_id", ""), request.POST.get("reason"), request.user)
+        messages.success(request, _("ID ignored. Its punches are kept but it is no longer listed."))
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    return redirect("bio-int-unmapped")
+
+
+@login_required
+@permission_required("biometric_integration.add_externalemployeemapping")
+@require_POST
+def unignore_id(request, provider_id):
+    provider = get_object_or_404(ProviderConfig, pk=provider_id)
+    employee_mapping.unignore_id(provider, request.POST.get("external_employee_id", ""))
+    return redirect("bio-int-unmapped")
+
+
+@login_required
+@permission_required("biometric_integration.add_externalemployeemapping")
+def worker_sheet_view(request):
+    form = WorkerSheetForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        cd = form.cleaned_data
+        try:
+            users = worker_sheet.parse_user_dat(cd["user_file"].read())
+            timenet = None
+            if cd["timenet_file"]:
+                import io
+
+                timenet = worker_sheet.read_timenet_export(io.BytesIO(cd["timenet_file"].read()), cd["timenet_file"].name)
+            exclude = [x for x in cd["exclude_ids"].replace("\n", ",").split(",")]
+            rows, excluded, unknown, tn_only = worker_sheet.build_rows(users, timenet, exclude, cd["provider"])
+            if not rows:
+                raise worker_sheet.WorkerSheetError("Every ID on the device is already in Horilla or was left out: nothing to create.")
+            content = worker_sheet.build_workbook(
+                rows, excluded, unknown, tn_only, company=cd["company"].company, email_domain=cd["email_domain"],
+                defaults={k: cd[k] for k in ("job_position", "job_role", "shift", "work_type", "employee_type", "location", "date_joining")},
+            )
+        except (worker_sheet.WorkerSheetError, ConnectorError) as exc:
+            form.add_error(None, str(exc))
+        else:
+            from django.http import HttpResponse
+
+            resp = HttpResponse(content, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            resp["Content-Disposition"] = 'attachment; filename="workers-to-import.xlsx"'
+            return resp
+    return render(request, T + "worker_sheet.html", {"form": form})

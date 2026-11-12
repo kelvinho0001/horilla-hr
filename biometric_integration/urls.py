@@ -11,4 +11,8 @@ urlpatterns = [
     path("mappings/new/", views.mapping_create, name="bio-int-mapping-create"),
     path("mappings/<int:pk>/deactivate/", views.mapping_deactivate, name="bio-int-mapping-deactivate"),
     path("unmapped/", views.unmapped_list, name="bio-int-unmapped"),
+    path("unmapped/<int:provider_id>/map-all/", views.map_all, name="bio-int-map-all"),
+    path("unmapped/<int:provider_id>/ignore/", views.ignore_id, name="bio-int-ignore"),
+    path("unmapped/<int:provider_id>/unignore/", views.unignore_id, name="bio-int-unignore"),
+    path("worker-sheet/", views.worker_sheet_view, name="bio-int-worker-sheet"),
 ]

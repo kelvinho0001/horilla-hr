@@ -70,14 +70,6 @@ class AttendanceRule(HorillaModel):
         Employee, null=True, blank=True, on_delete=models.CASCADE,
         related_name="attendance_rules",
     )
-    window_start = models.TimeField(
-        null=True, blank=True,
-        help_text=_("Earliest time a punch counts (e.g. 15:00). Empty = any time."),
-    )
-    window_end = models.TimeField(
-        null=True, blank=True,
-        help_text=_("Latest time a punch counts (e.g. 17:00). Empty = any time."),
-    )
     working_weekdays = models.CharField(
         max_length=20, default="0,1,2,3,4,5",
         help_text=_("Comma-separated weekday numbers, Monday=0 ... Sunday=6."),
@@ -89,6 +81,10 @@ class AttendanceRule(HorillaModel):
 
     def __str__(self):
         return self.name
+
+    def window_list(self):
+        """[(start, end), ...]; empty means any punch time counts."""
+        return [(w.start, w.end) for w in self.windows.all()]
 
     def weekday_set(self):
         return {int(x) for x in self.working_weekdays.split(",") if x.strip() != ""}
@@ -107,10 +103,27 @@ class AttendanceRule(HorillaModel):
             raise ValidationError({"working_weekdays": _("Use numbers 0-6 separated by commas.")}) from exc
         if not days or any(d < 0 or d > 6 for d in days):
             raise ValidationError({"working_weekdays": _("Use numbers 0-6 separated by commas.")})
-        if bool(self.window_start) != bool(self.window_end):
-            raise ValidationError(_("Set both window start and end, or neither."))
-        if self.window_start and self.window_end and self.window_start > self.window_end:
-            raise ValidationError(_("Window start must not be after window end."))
+
+
+class AttendanceRuleWindow(models.Model):
+    """
+    A time-of-day range in which a punch counts as attendance (e.g. 00:00-09:00 for the
+    night shift and 14:00-20:00 for the afternoon shift). A rule may have several; none = any time.
+    """
+
+    rule = models.ForeignKey(AttendanceRule, on_delete=models.CASCADE, related_name="windows")
+    start = models.TimeField()
+    end = models.TimeField()
+
+    class Meta:
+        ordering = ["start", "id"]
+
+    def clean(self):
+        if self.start and self.end and self.start >= self.end:
+            raise ValidationError(_("A window must start before it ends (it cannot cross midnight; use two windows)."))
+
+    def __str__(self):
+        return f"{self.start:%H:%M}-{self.end:%H:%M}"
 
 
 class AttendanceApproval(models.Model):

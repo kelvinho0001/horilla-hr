@@ -5,4 +5,5 @@
   <a class="oh-btn oh-btn--light" href="{% url "bio-int-batches" %}">{% trans "Import history" %}</a>
   <a class="oh-btn oh-btn--light" href="{% url "bio-int-unmapped" %}">{% trans "Unmapped IDs" %}</a>
   <a class="oh-btn oh-btn--light" href="{% url "bio-int-mapping-list" %}">{% trans "Mappings" %}</a>
+  {% if perms.biometric_integration.add_externalemployeemapping %}<a class="oh-btn oh-btn--light" href="{% url "bio-int-worker-sheet" %}">{% trans "Worker sheet" %}</a>{% endif %}
 </div>

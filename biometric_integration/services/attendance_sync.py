@@ -9,7 +9,7 @@ import hashlib
 from django.db import transaction
 from django.utils import timezone
 
-from ..models import ImportBatch, RawTransaction
+from ..models import IgnoredExternalID, ImportBatch, RawTransaction
 from . import duplicate_detection, employee_mapping, transaction_normalizer
 
 CHUNK = 1000
@@ -62,6 +62,7 @@ def _run(batch, provider, transactions, row_errors):
     all_errors = [e.as_dict() for e in row_errors] + [e.as_dict() for e in norm_errors]
 
     index = employee_mapping.active_mapping_index(provider)
+    ignored = set(IgnoredExternalID.objects.filter(provider=provider).values_list("external_employee_id", flat=True))
     keyed = {}
     in_file_dupes = 0
     for txn, aware in good:
@@ -88,7 +89,7 @@ def _run(batch, provider, transactions, row_errors):
         if key in existing:
             continue
         mapping = index.get(txn.external_employee_id)
-        if mapping is None:
+        if mapping is None and txn.external_employee_id not in ignored:
             unmapped += 1
         new_rows.append(
             RawTransaction(

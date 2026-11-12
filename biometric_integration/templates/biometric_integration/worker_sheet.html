@@ -1,0 +1,5 @@
+{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
+<h2>{% trans "Worker sheet for Horilla import" %}</h2>
+<p>{% trans "Upload the device's user list. You get an Excel file for Employees > Import with the IDs as Badge IDs, names split from FIRST.LAST, and a REVIEW sheet of things to check (same name twice, IDs already in Horilla, IDs that punch but are not enrolled...). Fill in or fix departments in the WORKERS sheet, then import it. Nothing is created until you do." %}</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary">{% trans "Download worker sheet" %}</button></form>
+</section>{% endblock %}
