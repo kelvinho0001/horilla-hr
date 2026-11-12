@@ -15,7 +15,7 @@ from base.models import CompanyGroupAssignment, Department, EmployeeType
 from biometric_integration.models import ExternalEmployeeMapping, ProviderConfig
 from employee.models import EmployeeWorkInformation
 from horilla.testkit import make_company, make_employee
-from payroll.models.models import LoanAccount
+from payroll.models.models import Contract, LoanAccount
 from weekly_payroll import permissions, services
 from weekly_payroll.export_xlsx import build_workbook
 from weekly_payroll.models import LoanDeduction, PayrollLine, PayrollRun
@@ -104,6 +104,60 @@ class CalculationTests(Base):
         # changing the employee record changes the next calculation
         EmployeeWorkInformation.objects.filter(employee_id=a).update(basic_salary=84000)
         self.assertEqual(self.line(services.generate(r), a).amount_earned, D("42000.00"))
+
+    def contract(self, e, wage, status="active", start=date(2024, 1, 1), end=None, wage_type="monthly", replace=False):
+        if replace:  # Horilla creates an active contract with wage 0 for every new employee
+            Contract.objects.filter(employee_id=e).delete()
+        return Contract.objects.create(contract_name="C", employee_id=e, contract_start_date=start, contract_end_date=end,
+                                       wage=float(wage), wage_type=wage_type, contract_status=status)
+
+    def test_horilla_auto_contract_with_zero_wage_counts_as_not_set(self):
+        e = self.worker(basic=None)
+        self.assertTrue(Contract.objects.filter(employee_id=e, wage=0).exists())   # the automatic one
+        self.present(e, 5)
+        self.assertTrue(any("No basic salary" in f for f in self.line(self.mkrun(), e).flags))
+
+    def test_contract_wage_entered_on_horillas_contract_is_used(self):
+        e = self.worker(basic=None)
+        Contract.objects.filter(employee_id=e).update(wage=70000.0, contract_start_date=date(2024, 1, 1))  # edited in Payroll > Contracts
+        self.present(e, 14)
+        l = self.line(self.mkrun(), e)
+        self.assertEqual((l.basic_salary, l.amount_earned, l.breakdown["basic_source"]), (D("70000"), D("35000.00"), "Contract wage"))
+        self.assertFalse(any("No basic salary" in f for f in l.flags))
+
+    def test_contract_wage_wins_over_work_information_and_work_information_is_the_fallback(self):
+        a, b = self.worker("50000"), self.worker("50000")
+        Contract.objects.filter(employee_id=a).update(wage=70000.0, contract_start_date=date(2024, 1, 1))
+        self.present(a, 28); self.present(b, 28)
+        r = self.mkrun()
+        self.assertEqual(self.line(r, a).basic_salary, D("70000"))
+        self.assertEqual((self.line(r, b).basic_salary, self.line(r, b).breakdown["basic_source"]), (D("50000"), "Work information"))
+
+    def test_contract_created_after_the_period_still_gives_the_salary_with_a_note(self):
+        e = self.worker(basic=None)
+        Contract.objects.filter(employee_id=e).update(wage=70000.0, contract_start_date=date(2025, 5, 1))
+        l = self.line(self.mkrun(), e)
+        self.assertEqual(l.basic_salary, D("70000"))
+        self.assertTrue(any("starts on" in f for f in l.flags))
+
+    def test_which_contract_counts(self):
+        e = self.worker(basic=None)
+        self.contract(e, "40000", status="expired", start=date(2023, 1, 1), end=date(2023, 12, 31), replace=True)
+        self.contract(e, "45000", status="terminated", start=date(2024, 7, 1), end=date(2024, 9, 1))
+        self.assertTrue(any("No basic salary" in f for f in self.line(self.mkrun(), e).flags))   # expired/terminated ignored
+        self.contract(e, "60000", status="draft", start=date(2024, 9, 15))
+        self.assertEqual(self.line(self.mkrun(name="d"), e).basic_salary, D("60000"))              # a draft contract is accepted
+        self.contract(e, "65000", status="active", start=date(2024, 8, 1))
+        self.assertEqual(self.line(self.mkrun(name="a"), e).basic_salary, D("65000"))              # active beats draft
+
+    def test_daily_or_hourly_contract_is_flagged_not_misread_as_a_month(self):
+        e = self.worker(basic=None)
+        self.contract(e, "3000", wage_type="daily", replace=True)
+        l = self.line(self.mkrun(), e)
+        self.assertEqual(l.basic_salary, D("0"))
+        self.assertTrue(any("Daily/Hourly" in f for f in l.flags))
+        EmployeeWorkInformation.objects.filter(employee_id=e).update(basic_salary=70000)
+        self.assertEqual(self.line(services.generate(PayrollRun.objects.get(pk=l.run_id)), e).basic_salary, D("70000"))
 
     def test_only_validated_attendance_counts_and_waiting_days_are_flagged(self):
         e = self.worker()

@@ -164,7 +164,7 @@ Complete Horilla's first-run screens if shown (company, first user).
 2. Give each staff member their group **for the company**: Horilla only applies a group's permissions in a company where the
    user has been assigned that group. Do not put everyone in the approver group. See `docs/demiller/PRODUCTION_RUNBOOK.md`.
 3. Create an Attendance Rule with the real attendance windows (Attendance > Biometric Attendance > Attendance rules).
-4. Put each worker's basic salary on the employee record (Employee > Work information), check their bank details (Payroll > Bank Export > Worker bank accounts) and map biometric IDs (Attendance > Biometric Import). Loans, salary advances and fines go in Payroll > Loans.
+4. Put each worker's monthly salary in Payroll > Contracts (Contract wage) or on the employee record (Employee > Work information), check their bank details (Payroll > Bank Export > Worker bank accounts) and map biometric IDs (Attendance > Biometric Import). Loans, salary advances and fines go in Payroll > Loans.
 
 ## 10. Backups (do this before real data goes in)
 

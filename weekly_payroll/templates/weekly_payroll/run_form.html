@@ -3,7 +3,7 @@
 {% block page_tabs %}{% include "weekly_payroll/_nav.html" %}{% endblock %}
 {% block page_body %}
 <div class="dm-form-card" style="max-width: 880px;">
-  <p class="text-muted">{% trans "Any date range. Days come from validated attendance (Attendance > Attendances), the basic salary from the worker's record, and fines, loans and salary advances from Payroll > Loans. Enter the working days of the pay month; you can change them per worker afterwards." %}</p>
+  <p class="text-muted">{% trans "Any date range. Days come from validated attendance (Attendance > Attendances), the basic salary from the worker's Contract wage (or the Basic Salary on the employee record), and fines, loans and salary advances from Payroll > Loans. Enter the working days of the pay month; you can change them per worker afterwards." %}</p>
   <form method="post">{% csrf_token %}
     {% include "demiller/_form_fields.html" with cols=6 %}
     <div class="d-flex flex-row-reverse"><button class="oh-btn oh-btn--secondary">{% trans "Calculate" %}</button></div>

@@ -7,7 +7,7 @@ Everything the payroll needs is read from Horilla's own records. A payroll run i
 |---|---|
 | WEEK 1..n, TOTAL DAY | **validated** Horilla attendance (Attendance > Attendances), one per worker per day, including attendance HR added by hand. One column per 7 days from the run start. |
 | WORKING DAYS | entered by HR when creating the run (default for all), overridable per worker. |
-| BASIC SALARY | the worker's **employee record**: Employee > Work information > Basic Salary (full month). Change it there and Recalculate. |
+| BASIC SALARY | the worker's full-month salary: the **Contract wage** (Payroll > Contracts, wage type Monthly), otherwise the **Basic Salary** on the employee record (Employee > Work information). A contract in force during the run is used first (active before draft, newest first); a contract that starts after the run is still used, with a note on the line. Horilla creates a contract with wage 0 for every employee: a zero wage counts as not set. Expired/terminated contracts and Daily/Hourly wages are not used. Change the salary and press Recalculate. |
 | FINES | Horilla **fines**: Payroll > Loans > Fine (a loan-type record of type "Penalty / Fine"). |
 | IOU | Horilla **loans and salary advances** (Payroll > Loans > Loan / Salary Advance). |
 | AMOUNT EARNED | `ROUND(TOTAL DAY / WORKING DAYS x BASIC SALARY, 2) - FINES - IOU`, to the kobo, `Decimal` throughout. |
@@ -30,7 +30,7 @@ A payroll run takes every instalment that is **due on or before the run's end da
 ## Lifecycle and locking
 Draft > Reviewed (HR Officer or Approver) > Approved (Approver only) > Exported > Paid (bank export). Changing working days sends a reviewed run back to draft.
 Approved runs cannot be recalculated or edited; approval also refuses overlapping approved periods for the same worker. Blockers for review: working days missing,
-**no basic salary on the employee record**, or no workers.
+**no basic salary** (neither a monthly Contract wage nor a Work-information Basic Salary), or no workers.
 
 ## Roles
 HR Officer: create/recalculate runs, working days, mark reviewed, loans/fines in Horilla. HR/Payroll Approver: approve payroll. Management: view. Accountant: approved runs only.

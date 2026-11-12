@@ -34,7 +34,7 @@ Roles: log in as a different user for each role.
 ## D. Payroll (HR Officer, Approver)
 | # | Check | Expected | Pass |
 |---|---|---|---|
-| D1 | Basic salary set on Employee > Work information | the run uses it; changing it and pressing Recalculate changes the amount | |
+| D1 | Salary set as the Contract wage (Payroll > Contracts, Monthly) or Basic Salary (Employee > Work information) | the run uses it (contract first); changing it and pressing Recalculate changes the amount | |
 | D2 | Create a run for any date range with working days | each worker's amount = days / working days x basic - fines - IOU, to the kobo | |
 | D3 | Compare 3 workers with the manual sheet | identical | |
 | D4 | Attendance still waiting for validation | flagged on the line, not counted | |

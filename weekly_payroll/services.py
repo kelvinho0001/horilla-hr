@@ -12,7 +12,8 @@ from attendance_processing import calculators
 from base.methods import get_nth_month_same_date
 from biometric_integration.models import ExternalEmployeeMapping
 from employee.models import Employee
-from payroll.models.models import LoanAccount
+from django.db.models import Q
+from payroll.models.models import Contract, LoanAccount
 
 from .models import LoanDeduction, PayrollLine, PayrollRun
 from .money import D, kobo
@@ -85,10 +86,48 @@ def payroll_employees(run):
     return list(qs.order_by("badge_id", "employee_first_name"))
 
 
-def basic_salary_of(emp):
-    """The full-month basic salary on the employee record (Work information)."""
+NO_SALARY = "No basic salary: set the Contract wage (Payroll > Contracts) or Basic Salary (Employee > Work information)"
+
+
+def contracts_by_employee(emp_ids, run):
+    """
+    Active and still-draft contracts per employee, best first: those in force during the run (active before draft,
+    newest first), then the others (earliest first), so a contract created after the period still gives a salary.
+    Expired and terminated contracts are ignored.
+    """
+    found = defaultdict(list)
+    for c in Contract.objects.filter(employee_id__in=emp_ids, is_active=True, contract_status__in=("active", "draft")):
+        found[c.employee_id_id].append(c)
+
+    def in_force(c):
+        return c.contract_start_date <= run.end_date and (c.contract_end_date is None or c.contract_end_date >= run.start_date)
+
+    for lst in found.values():
+        lst.sort(key=lambda c: (0, c.contract_status != "active", -c.contract_start_date.toordinal())
+                 if in_force(c) else (1, 0, c.contract_start_date.toordinal()))
+    return found
+
+
+def basic_salary_of(emp, contracts=(), run=None):
+    """
+    The full-month basic salary and where it came from: the worker's monthly Contract wage (Payroll > Contracts), otherwise
+    the Basic Salary on the employee record (Work information). Horilla creates a contract with wage 0 for every employee;
+    a zero wage counts as "not set". Returns (amount, source, note); (0, "", "") when neither is set.
+    """
+    for c in contracts:
+        if c.wage_type == "monthly" and c.wage and D(c.wage) > 0:
+            note = ""
+            if run is not None and c.contract_start_date > run.end_date:
+                note = f"The contract starts on {c.contract_start_date:%d %b %Y}, after this period; its wage was used"
+            return D(c.wage), "Contract wage", note
     wi = getattr(emp, "employee_work_info", None)
-    return D(getattr(wi, "basic_salary", None) or 0)
+    work_info = D(getattr(wi, "basic_salary", None) or 0)
+    # Horilla copies an active contract's wage into Work information whatever its wage type, so a daily or hourly
+    # wage showing up there is not a full-month salary.
+    not_monthly = {D(int(c.wage or 0)) for c in contracts if c.wage_type != "monthly"}
+    if work_info > 0 and work_info not in not_monthly:
+        return work_info, "Work information", ""
+    return D(0), "", ""
 
 
 # ---------------------------------------------------------------- generation
@@ -120,6 +159,7 @@ def generate(run):
         else:
             waiting[emp_id] += 1
 
+    contracts = contracts_by_employee(ids, run)
     collected = defaultdict(set)
     for loan_id, no in LoanDeduction.objects.filter(loan__employee_id__in=ids).values_list("loan_id", "installment_no"):
         collected[loan_id].add(no)
@@ -137,7 +177,7 @@ def generate(run):
         week_counts = [sum(1 for d in days if a <= d <= b) for a, b in weeks]
         line = existing.get(e.pk) or PayrollLine(run=run, employee=e)
         working = line.working_days_override if line.working_days_override is not None else run.default_working_days
-        basic = basic_salary_of(e)
+        basic, basic_source, basic_note = basic_salary_of(e, contracts.get(e.pk, []), run)
 
         fine_items, loan_items = [], []
         fine_total = iou = Decimal("0")
@@ -157,8 +197,11 @@ def generate(run):
             flags.append(f"{waiting[e.pk]} attendance day(s) waiting for validation - not counted")
         if not days:
             flags.append("No validated attendance in range")
+        if basic_note:
+            flags.append(basic_note)
         if not basic:
-            flags.append("No basic salary on the employee record")
+            flags.append(NO_SALARY if not any(c.wage_type != "monthly" for c in contracts.get(e.pk, [])) else
+                         "The contract wage is Daily/Hourly: set a full-month Contract wage or the Basic Salary (Employee > Work information)")
         if working and sum(week_counts) > working:
             flags.append("Days attended exceed working days")
         if not working:
@@ -179,7 +222,7 @@ def generate(run):
         line.flags = flags
         line.breakdown = {
             "formula": f"{sum(week_counts)} / {working} x {basic} - {fine_total} - {iou}",
-            "fines": fine_items, "loans": loan_items,
+            "fines": fine_items, "loans": loan_items, "basic_source": basic_source,
         }
         line.save()
         total_net += earned
@@ -231,7 +274,7 @@ def blockers(run):
         if not l.working_days:
             out.append(f"{label}: working days not set")
         if not l.basic_salary:
-            out.append(f"{label}: no basic salary on the employee record (Employee > Work information)")
+            out.append(f"{label}: no basic salary (set the Contract wage in Payroll > Contracts, or Basic Salary in Employee > Work information)")
     return out
 
 

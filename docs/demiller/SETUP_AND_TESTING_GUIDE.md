@@ -93,7 +93,7 @@ Menu names can differ slightly by Horilla version.
 | 7 | Attendance > Biometric Import | Upload a real week, map IDs. |
 | 8 | Payroll > Bank Export > Bank list | Already loaded (87 banks). Check `044` shows its zero. |
 | 9 | Payroll > Bank Export > Worker bank accounts | Lists every employee with what their Employee > Bank details say and the bank it matched. Fix anyone not OK: pick the bank from the drop-down and enter the 10-digit account number. |
-| 10 | Employee > Work information | **Basic Salary** (full month) on every worker. This is what payroll uses; there is no separate pay-profile screen. (The worker-sheet/import can fill it too.) |
+| 10 | Payroll > Contracts (or Employee > Work information) | The full-month salary of every worker: the **Contract wage** (wage type Monthly) in Payroll > Contracts, or the Basic Salary in Employee > Work information. Payroll uses the contract wage first; there is no separate pay-profile screen. |
 | 11 | Payroll > Loans (Horilla's own page) | Loans, salary advances and fines are created here (tabs Loan / Salary Advance / Fine): amount, number of instalments, instalment start date. Payroll reads them. A fine with one instalment is taken in full by the first payroll run that ends on or after its date. |
 | 13 | Server | HTTPS only (`SECURE_SSL_REDIRECT=True`), **nightly backup cron** (DEPLOYMENT.md section 10) and a copy of backups kept **off the server**, admin password changed, `TIME_ZONE=Africa/Lagos`. |
 | 14 | Branding | Section 5. |
@@ -138,7 +138,7 @@ This writes `test_employees.csv` (4 test workers TST001-TST004) and `test_attend
 * Open **Attendance > Attendances**: the same records are in **Attendance To Validate**. Select all and **validate** (log in as an HR Officer: the validate action is available to them). They turn green on Biometric Attendance.
 * Try **Create** on Attendances: add one day by hand for TST004 and validate it: payroll will count it (it changes TST004's total, so delete it again before comparing with the table below).
 
-**6. Basic salaries:** Employee > Work information: TST001 70,000, TST002 55,000, TST003 70,000, TST004 70,000. (The test import file already carries them in its Basic Salary column; check they are there.)
+**6. Basic salaries:** Payroll > Contracts (wage type Monthly) or Employee > Work information: TST001 70,000, TST002 55,000, TST003 70,000, TST004 70,000. (The test import file already carries them in its Basic Salary column; Horilla turns that into each worker's contract. Check they are there.)
 
 **7. Fines:** Payroll > Loans > **Fine** tab > Create: TST001 5,000, TST002 4,500, TST003 2,300, **1 instalment**, start date inside the 28 days.
 
@@ -162,7 +162,7 @@ Formula: `ROUND(days ÷ working days × basic, 2) − fines − IOU`. TST002: 19
 * **Mark reviewed** (HR Officer), then try **Approve** as HR Officer: refused. Approve as **Approver**: the run locks, and the fines/loans become **Settled** in Payroll > Loans.
 * Make a **second run** over the same days: it shows **no fines and no IOU** (already deducted) and cannot be approved while overlapping the first.
 * A run that ends **before** a loan's instalment date shows IOU 0 (monthly instalments are only taken when due).
-* Remove a worker's basic salary on the employee record and press **Recalculate**: the line is flagged and **Mark reviewed** is refused until it is fixed.
+* Set a worker's contract wage to 0 (and clear Work information) and press **Recalculate**: the line is flagged and **Mark reviewed** is refused until it is fixed.
 
 **11. Bank export:** Payroll > Bank Export > Worker bank accounts lists every employee with what their record says. Give TST001-TST003 a bank and a test account number (e.g. `0123456789`, `0000000042`: keep the leading zero case), leave TST004 without. As **Accountant**: Bank Export > the run. Expect **TST004 listed as a problem** and the export blocked; tick "export valid workers only" (or add the account) and generate. Open the file: **PAYMENT SCHEDULE** has the right bank codes, account numbers with their leading zeros, amounts, and the narration; the count/total equal the payroll (excluding the left-out worker). A second export is refused; **Supersede** (Approver, reason) lets you regenerate; **Mark paid** is final.
 
