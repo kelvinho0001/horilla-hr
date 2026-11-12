@@ -1,8 +1,30 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "bank_export/_nav.html" %}
-<h2>{% trans "Worker bank accounts" %}</h2>
-<p>{{ problem_count }} {% trans "of" %} {{ rows|length }} {% trans "need attention" %}.</p>
-<table class="oh-table" style="width:100%"><thead><tr><th>ID</th><th>{% trans "Worker" %}</th><th>{% trans "Bank" %}</th><th>{% trans "Account" %}</th><th>{% trans "Status" %}</th><th></th></tr></thead>
-{% for r in rows %}<tr><td>{{ r.employee.badge_id }}</td><td>{{ r.employee.get_full_name }}</td><td>{{ r.bank.name|default:"—" }}</td><td>{{ r.account }}</td><td>{% if r.issues %}<span style="color:#b00020">{{ r.issues|join:"; " }}</span>{% else %}OK{% endif %}</td>
-<td>{% if can_edit %}<a class="oh-btn oh-btn--light" href="{% url 'bx-account-edit' r.employee.pk %}">{% trans "Edit" %}</a>{% endif %}</td></tr>
-{% empty %}<tr><td colspan="6">{% trans "No workers with a pay profile yet." %}</td></tr>{% endfor %}</table>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Worker bank accounts" %}{% endblock %}
+{% block page_tabs %}{% include "bank_export/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="dm-form-card mb-3" style="padding:.9rem 1rem;">
+  <form method="get" class="row align-items-end g-2">
+    <div class="col-12 col-md-4"><label class="oh-label">{% trans "Search" %}</label><input name="q" value="{{ q }}" class="oh-input w-100" placeholder="{% trans 'ID or name' %}"></div>
+    <div class="col-6 col-md-3"><label class="oh-label">{% trans "Department" %}</label><select name="department" class="oh-select w-100"><option value="">{% trans "All" %}</option>{% for d in departments %}<option value="{{ d.pk }}" {% if dept == d.pk|stringformat:"s" %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></div>
+    <div class="col-6 col-md-3"><label class="mt-3"><input type="checkbox" name="problems" value="1" {% if only_problems %}checked{% endif %}> {% trans "Only those needing attention" %}</label></div>
+    <div class="col-12 col-md-2"><button class="oh-btn oh-btn--secondary w-100">{% trans "Show" %}</button></div>
+  </form>
+</div>
+<p class="mb-2"><b>{{ problem_count }}</b> {% trans "of" %} {{ total }} {% trans "need attention" %}. <span class="text-muted">{% trans "Details come from each worker's Employee > Bank details; pick the matching bank from the list so the bank code is exact. Only the last 4 digits of an account are shown." %}</span></p>
+<div class="oh-sticky-table"><div class="oh-sticky-table__table">
+  <div class="oh-sticky-table__thead"><div class="oh-sticky-table__tr">
+    <div class="oh-sticky-table__th">{% trans "Worker" %}</div><div class="oh-sticky-table__th">{% trans "Bank on employee record" %}</div><div class="oh-sticky-table__th">{% trans "Matched bank (code)" %}</div><div class="oh-sticky-table__th">{% trans "Account" %}</div><div class="oh-sticky-table__th">{% trans "Status" %}</div><div class="oh-sticky-table__th"></div>
+  </div></div>
+  <div class="oh-sticky-table__tbody">
+    {% for r in page %}<div class="oh-sticky-table__tr">
+      <div class="oh-sticky-table__sd"><span class="text-muted me-1">{{ r.employee.badge_id|default:"" }}</span>{{ r.employee.get_full_name }}</div>
+      <div class="oh-sticky-table__td">{{ r.record_bank|default:"—" }}</div>
+      <div class="oh-sticky-table__td">{% if r.bank %}{{ r.bank.name }} ({{ r.bank.code }}){% else %}—{% endif %}</div>
+      <div class="oh-sticky-table__td">{{ r.account|default:"—" }}</div>
+      <div class="oh-sticky-table__td">{% if r.issues %}<span class="dm-dot dm-dot--danger"></span> <span class="text-danger">{{ r.issues|join:"; " }}</span>{% else %}<span class="dm-dot dm-dot--success"></span> OK{% endif %}</div>
+      <div class="oh-sticky-table__td">{% if can_edit %}<a class="oh-btn oh-btn--light oh-btn--small" href="{% url 'bx-account-edit' r.employee.pk %}">{% trans "Edit" %}</a>{% endif %}</div>
+    </div>{% empty %}<div class="oh-sticky-table__tr"><div class="oh-sticky-table__td" style="grid-column:1/-1">{% trans "No employees match." %}</div></div>{% endfor %}
+  </div>
+</div></div>
+{% include "demiller/_pager.html" with qs="q="|add:q|add:"&department="|add:dept|add:"&" %}
+{% endblock %}

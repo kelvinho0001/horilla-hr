@@ -1,12 +1,29 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
-<h2>{% trans "Unmapped biometric IDs" %}</h2>
-{% for s in sections %}<h3>{{ s.provider }}</h3>
-{% if can_map and s.suggested %}<form method="post" action="{% url 'bio-int-map-all' s.provider.pk %}" onsubmit="return confirm('{% trans 'Map every ID that matches a Badge ID?' %}')">{% csrf_token %}<button class="oh-btn oh-btn--success">{% trans "Map all matching IDs" %} ({{ s.suggested }})</button></form>{% endif %}
-<table class="oh-table" style="width:100%;"><thead><tr><th>{% trans "Biometric ID" %}</th><th>{% trans "Punches" %}</th><th>{% trans "Suggested worker (same Badge ID)" %}</th><th></th></tr></thead>
-{% for r in s.rows %}<tr><td>{{ r.external_employee_id }}</td><td>{{ r.count }}</td><td>{{ r.suggestion|default:"—" }}</td>
-<td><a class="oh-btn oh-btn--light" href="{% url 'bio-int-mapping-create' %}?provider={{ s.provider.pk }}&external_employee_id={{ r.external_employee_id|urlencode }}{% if r.suggestion %}&employee={{ r.suggestion.pk }}{% endif %}">{% trans "Map" %}</a>
-{% if can_map %}<form method="post" action="{% url 'bio-int-ignore' s.provider.pk %}" style="display:inline">{% csrf_token %}<input type="hidden" name="external_employee_id" value="{{ r.external_employee_id }}"><input name="reason" required placeholder="{% trans 'Why ignore (e.g. office staff)' %}"><button class="oh-btn oh-btn--light">{% trans "Ignore" %}</button></form>{% endif %}</td></tr>
-{% empty %}<tr><td colspan="4">{% trans "Nothing unmapped." %}</td></tr>{% endfor %}</table>
-{% if s.ignored %}<details><summary>{% trans "Ignored IDs" %} ({{ s.ignored|length }})</summary><ul>{% for i in s.ignored %}<li>{{ i.external_employee_id }} — {{ i.reason }}{% if can_map %} <form method="post" action="{% url 'bio-int-unignore' s.provider.pk %}" style="display:inline">{% csrf_token %}<input type="hidden" name="external_employee_id" value="{{ i.external_employee_id }}"><button class="oh-btn oh-btn--light">{% trans "Stop ignoring" %}</button></form>{% endif %}</li>{% endfor %}</ul></details>{% endif %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Unmapped biometric IDs" %}{% endblock %}
+{% block page_tabs %}{% include "biometric_integration/_nav.html" %}{% endblock %}
+{% block page_body %}
+<p class="text-muted">{% trans "IDs that appeared in uploaded punches but are not linked to a worker. A worker is suggested only when the ID equals a Badge ID exactly." %}</p>
+{% for s in sections %}
+<div class="dm-form-card mb-4" style="padding:.9rem 1rem;">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="fw-bold mb-0">{{ s.provider }}</h5>
+    {% if can_map and s.suggested %}<form method="post" action="{% url 'bio-int-map-all' s.provider.pk %}" onsubmit="return confirm('{% trans 'Map every ID that matches a Badge ID?' %}')">{% csrf_token %}<button class="oh-btn oh-btn--success">{% trans "Map all matching IDs" %} ({{ s.suggested }})</button></form>{% endif %}
+  </div>
+  <div class="oh-sticky-table"><div class="oh-sticky-table__table">
+    <div class="oh-sticky-table__thead"><div class="oh-sticky-table__tr">
+      <div class="oh-sticky-table__th">{% trans "Biometric ID" %}</div><div class="oh-sticky-table__th">{% trans "Punches" %}</div><div class="oh-sticky-table__th">{% trans "Suggested worker" %}</div><div class="oh-sticky-table__th">{% trans "Actions" %}</div>
+    </div></div>
+    <div class="oh-sticky-table__tbody">
+      {% for r in s.rows %}<div class="oh-sticky-table__tr">
+        <div class="oh-sticky-table__sd">{{ r.external_employee_id }}</div><div class="oh-sticky-table__td">{{ r.count }}</div><div class="oh-sticky-table__td">{{ r.suggestion|default:"—" }}</div>
+        <div class="oh-sticky-table__td" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+          <a class="oh-btn oh-btn--light oh-btn--small" style="width:auto" href="{% url 'bio-int-mapping-create' %}?provider={{ s.provider.pk }}&external_employee_id={{ r.external_employee_id|urlencode }}{% if r.suggestion %}&employee={{ r.suggestion.pk }}{% endif %}">{% trans "Map" %}</a>
+          {% if can_map %}<form method="post" action="{% url 'bio-int-ignore' s.provider.pk %}" style="display:flex;gap:.25rem;margin:0">{% csrf_token %}<input type="hidden" name="external_employee_id" value="{{ r.external_employee_id }}"><input name="reason" required class="oh-input me-1" style="width: 12rem" placeholder="{% trans 'Why ignore? (e.g. office staff)' %}"><button class="oh-btn oh-btn--light oh-btn--small" style="width:auto">{% trans "Ignore" %}</button></form>{% endif %}
+        </div>
+      </div>{% empty %}<div class="oh-sticky-table__tr"><div class="oh-sticky-table__td" style="grid-column:1/-1">{% trans "Nothing unmapped." %}</div></div>{% endfor %}
+    </div>
+  </div></div>
+  {% if s.ignored %}<details class="mt-3"><summary class="fw-bold">{% trans "Ignored IDs" %} ({{ s.ignored|length }})</summary><ul class="mt-2">{% for i in s.ignored %}<li>{{ i.external_employee_id }} — {{ i.reason }}{% if can_map %} <form method="post" action="{% url 'bio-int-unignore' s.provider.pk %}" class="d-inline">{% csrf_token %}<input type="hidden" name="external_employee_id" value="{{ i.external_employee_id }}"><button class="oh-btn oh-btn--light oh-btn--small">{% trans "Stop ignoring" %}</button></form>{% endif %}</li>{% endfor %}</ul></details>{% endif %}
+</div>
 {% endfor %}
-</section>{% endblock %}
+{% endblock %}

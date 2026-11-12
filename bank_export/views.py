@@ -1,12 +1,15 @@
 from django.contrib import messages
+from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 
+from base.models import Department
 from employee.models import Employee
 from horilla.decorators import login_required, permission_required
-from weekly_payroll.models import PayrollRun, PayrollLine
+from weekly_payroll.models import PayrollRun
 
 from . import services
 from .forms import BankUploadForm, WorkerBankForm
@@ -118,17 +121,32 @@ def banks(request):
 @login_required
 @permission_required(P + "view_bank_accounts")
 def accounts(request):
+    """Every active employee with what the employee record says and what the bank list matched."""
+    q = request.GET.get("q", "").strip()
+    only_problems = request.GET.get("problems") == "1"
+    qs = Employee.objects.filter(is_active=True).select_related("employee_work_info", "employee_work_info__department_id")
+    if q:
+        qs = qs.filter(
+            Q(badge_id__icontains=q) | Q(employee_first_name__icontains=q) | Q(employee_last_name__icontains=q)
+        )
+    dept = request.GET.get("department")
+    if dept:
+        qs = qs.filter(employee_work_info__department_id=dept)
+    qs = qs.order_by("badge_id", "employee_first_name")
     rows = []
-    can_edit = request.user.has_perm(P + "edit_bank_accounts")
-    lines = PayrollLine.objects.values_list("employee_id", flat=True).distinct()
-    from weekly_payroll.models import WorkerPayProfile
-
-    ids = set(WorkerPayProfile.objects.filter(status="approved").values_list("employee_id", flat=True)) | set(lines)
-    for e in Employee.objects.filter(pk__in=ids, is_active=True).order_by("badge_id"):
+    for e in qs:
         bank, acct, issues = services.resolve_bank(e)
-        rows.append({"employee": e, "bank": bank, "account": services.mask(acct), "issues": issues})
+        if only_problems and not issues:
+            continue
+        name, code, raw_acct = services.record_text(e)
+        rows.append({"employee": e, "bank": bank, "account": services.mask(acct), "issues": issues,
+                     "record_bank": name or code, "has_record": bool(raw_acct or name or code)})
+    page = Paginator(rows, 50).get_page(request.GET.get("page"))
     return render(request, T + "accounts.html", {
-        "rows": rows, "can_edit": can_edit, "problem_count": sum(1 for r in rows if r["issues"]),
+        "page": page, "q": q, "only_problems": only_problems, "dept": dept, "total": len(rows),
+        "departments": Department.objects.all(),
+        "can_edit": request.user.has_perm(P + "edit_bank_accounts"),
+        "problem_count": sum(1 for r in rows if r["issues"]),
     })
 
 

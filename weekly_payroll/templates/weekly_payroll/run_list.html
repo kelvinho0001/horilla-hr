@@ -1,7 +1,20 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "weekly_payroll/_nav.html" %}
-<h2>{% trans "Payroll runs" %}</h2>
-{% if can_add %}<a class="oh-btn oh-btn--secondary" href="{% url 'wp-run-new' %}">{% trans "New payroll run" %}</a>{% endif %}
-<table class="oh-table" style="width:100%;margin-top:1rem;"><thead><tr><th>{% trans "Name" %}</th><th>{% trans "Period" %}</th><th>{% trans "Workers" %}</th><th>{% trans "Total net" %}</th><th>{% trans "Status" %}</th></tr></thead>
-{% for r in runs %}<tr><td><a href="{% url 'wp-run-detail' r.pk %}">{{ r.name }}</a></td><td>{{ r.start_date }} → {{ r.end_date }}</td><td>{{ r.employee_count }}</td><td>₦{{ r.total_net|floatformat:2 }}</td><td>{{ r.get_status_display }}</td></tr>
-{% empty %}<tr><td colspan="5">{% trans "No payroll runs." %}</td></tr>{% endfor %}</table>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Payroll runs" %}{% endblock %}
+{% block page_actions %}{% if can_add %}<a class="oh-btn oh-btn--secondary" href="{% url 'wp-run-new' %}"><ion-icon name="add-outline" class="me-1"></ion-icon>{% trans "New payroll run" %}</a>{% endif %}{% endblock %}
+{% block page_tabs %}{% include "weekly_payroll/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="oh-sticky-table"><div class="oh-sticky-table__table">
+  <div class="oh-sticky-table__thead"><div class="oh-sticky-table__tr">
+    <div class="oh-sticky-table__th">{% trans "Name" %}</div><div class="oh-sticky-table__th">{% trans "Period" %}</div><div class="oh-sticky-table__th">{% trans "Workers" %}</div><div class="oh-sticky-table__th">{% trans "Total net" %}</div><div class="oh-sticky-table__th">{% trans "Status" %}</div>
+  </div></div>
+  <div class="oh-sticky-table__tbody">
+    {% for r in runs %}<div class="oh-sticky-table__tr" onclick="window.location='{% url 'wp-run-detail' r.pk %}'" style="cursor:pointer">
+      <div class="oh-sticky-table__sd">{{ r.name }}</div>
+      <div class="oh-sticky-table__td">{{ r.start_date|date:"d M Y" }} → {{ r.end_date|date:"d M Y" }}</div>
+      <div class="oh-sticky-table__td">{{ r.employee_count }}</div>
+      <div class="oh-sticky-table__td">₦{{ r.total_net|floatformat:"2g" }}</div>
+      <div class="oh-sticky-table__td"><span class="oh-dot oh-dot--{% if r.status == 'draft' %}warning{% elif r.status == 'reviewed' %}info{% else %}success{% endif %}"></span> {{ r.get_status_display }}</div>
+    </div>{% empty %}<div class="oh-sticky-table__tr"><div class="oh-sticky-table__td" style="grid-column:1/-1">{% trans "No payroll runs yet." %}</div></div>{% endfor %}
+  </div>
+</div></div>
+{% endblock %}

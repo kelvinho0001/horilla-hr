@@ -1,5 +1,12 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "weekly_payroll/_nav.html" %}
-<h2>{% trans "New payroll run" %}</h2>
-<p>{% trans "Any date range. Only approved attendance is counted. Working days for the pay month are entered here and can be changed per worker afterwards." %}</p>
-<form method="post">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary">{% trans "Calculate" %}</button></form>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "New payroll run" %}{% endblock %}
+{% block page_tabs %}{% include "weekly_payroll/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="dm-form-card" style="max-width: 880px;">
+  <p class="text-muted">{% trans "Any date range. Days come from validated attendance (Attendance > Attendances), the basic salary from the worker's record, and fines, loans and salary advances from Payroll > Loans. Enter the working days of the pay month; you can change them per worker afterwards." %}</p>
+  <form method="post">{% csrf_token %}
+    {% include "demiller/_form_fields.html" with cols=6 %}
+    <div class="d-flex flex-row-reverse"><button class="oh-btn oh-btn--secondary">{% trans "Calculate" %}</button></div>
+  </form>
+</div>
+{% endblock %}

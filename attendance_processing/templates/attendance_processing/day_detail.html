@@ -1,13 +1,18 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "attendance_processing/_nav.html" %}
-<h2>{{ emp.get_full_name }} — {{ day }}</h2>
-<p>{% trans "Status" %}: <b>{{ daily.get_status_display|default:"—" }}</b>{% if daily.approval_id %} 🔒 {% trans "approved" %}{% endif %} {% if daily.flags %}· {{ daily.flags|join:", " }}{% endif %}</p>
-<h3>{% trans "Biometric punches" %}</h3>
-<ul>{% for p in punches %}<li>{{ p.attendance_timestamp }} · {% trans "device" %} {{ p.external_device_id|default:"—" }} · {{ p.provider }}</li>{% empty %}<li>{% trans "No punches." %}</li>{% endfor %}</ul>
-{% if perms.attendance_processing.correct_attendance and not daily.approval_id %}
-<h3>{% trans "Correct" %}</h3>
-<form method="post" action="{% url 'att-proc-correct' %}">{% csrf_token %}<input type="hidden" name="employee" value="{{ emp.pk }}"><input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
-<select name="status"><option value="present">{% trans "Present" %}</option><option value="absent">{% trans "Absent" %}</option><option value="leave">{% trans "Approved leave" %}</option><option value="holiday">{% trans "Holiday" %}</option><option value="rest">{% trans "Rest day" %}</option></select>
-<input name="reason" required placeholder="{% trans 'Reason (required)' %}" size="40"><button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></form>{% endif %}
-<h3>{% trans "Correction history" %}</h3>
-<ul>{% for c in corrections %}<li>{{ c.created_at }} · {{ c.user }} · {{ c.old_status|default:"—" }} → {{ c.new_status }} · {{ c.reason }}</li>{% empty %}<li>{% trans "None." %}</li>{% endfor %}</ul>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{{ emp.get_full_name }} — {{ day|date:"D d M Y" }}{% endblock %}
+{% block page_tabs %}{% include "attendance_processing/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="dm-form-card mb-3" style="max-width: 760px;">
+  <p class="mb-2">
+    {% if attendance %}<span class="oh-dot oh-dot--{% if attendance.attendance_validated %}success{% else %}warning{% endif %}"></span> {% if attendance.attendance_validated %}{% trans "Validated attendance" %}{% else %}{% trans "In Attendances, waiting for validation" %}{% endif %}
+    {% elif info and info.status == "attention" %}<span class="dm-dot dm-dot--danger"></span> {% trans "Needs attention" %}: {% if "two_shifts_same_day" in info.flags %}{% trans "punches in two different shifts on the same day" %}{% else %}{% trans "no punch inside the attendance windows" %}{% endif %}
+    {% else %}{% trans "No attendance for this day." %}{% endif %}
+  </p>
+  <h6 class="fw-bold">{% trans "Biometric punches" %} ({{ tz }})</h6>
+  <ul>{% for p in punches %}<li>{{ p.attendance_timestamp|time:"H:i:s" }} · {{ p.provider }}</li>{% empty %}<li>{% trans "No punches." %}</li>{% endfor %}</ul>
+  {% if can_accept and info and info.status == "attention" and not attendance %}
+  <form method="post" action="{% url 'att-proc-accept' %}">{% csrf_token %}<input type="hidden" name="employee" value="{{ emp.pk }}"><input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <button class="oh-btn oh-btn--secondary">{% trans "Add to Attendances anyway" %}</button></form>
+  {% endif %}
+</div>
+{% endblock %}

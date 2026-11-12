@@ -1,37 +1,36 @@
-"""Processing, correction, approval and reopening of daily attendance."""
+"""Turn biometric punches into ordinary Horilla attendance records."""
 
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Q
 from django.utils import timezone
 
-from base.models import Holidays
+from attendance.models import Attendance
 from biometric_integration.models import ExternalEmployeeMapping, RawTransaction
 from employee.models import Employee
 
 from . import calculators
-from .models import (
-    CORRECTABLE, UNRESOLVED, ABSENT, MISSING, AttendanceApproval, AttendanceCorrection,
-    AttendanceRule, DailyAttendance,
-)
+from .models import AttendanceRule
 
-# Used only when no rule applies at all. A global rule overrides it.
-FALLBACK_WEEKDAYS = {0, 1, 2, 3, 4, 5}
 MAX_RANGE_DAYS = 93
+MIN_GAP_FOR_CHECKOUT = timedelta(hours=1)
 
 
 class AttendanceError(Exception):
     pass
 
 
-class ApprovalBlocked(AttendanceError):
-    def __init__(self, rows):
-        self.rows = rows
-        super().__init__(f"{len(rows)} day(s) still need review")
+@dataclass
+class DayInfo:
+    status: str  # calculators.OK or calculators.ATTENTION
+    flags: list = field(default_factory=list)
+    count: int = 0
+    first: datetime = None
+    last: datetime = None
 
 
 def attendance_tz():
@@ -82,218 +81,106 @@ class RuleResolver:
         return None
 
 
-def _holiday_checker(start, end):
-    qs = Holidays.objects.filter(is_active=True) if hasattr(Holidays, "is_active") else Holidays.objects.all()
-    holidays = list(qs.prefetch_related("department", "job_position", "employees"))
-
-    def covers(h, d):
-        h_end = h.end_date or h.start_date
-        if h.recurring:
-            # compare month/day ignoring year (ranges inside one year only)
-            try:
-                s = h.start_date.replace(year=d.year)
-                e = h_end.replace(year=d.year)
-            except ValueError:  # 29 Feb
-                return False
-            return s <= d <= e
-        return h.start_date <= d <= h_end
-
-    def is_holiday(emp, d):
-        wi = getattr(emp, "employee_work_info", None)
-        for h in holidays:
-            if not covers(h, d):
-                continue
-            if not h.is_specific:
-                return True
-            if h.assigning_type == "department" and wi and any(
-                x.pk == wi.department_id_id for x in h.department.all()
-            ):
-                return True
-            if h.assigning_type == "job_position" and wi and any(
-                x.pk == wi.job_position_id_id for x in h.job_position.all()
-            ):
-                return True
-            if h.assigning_type == "employee" and any(x.pk == emp.pk for x in h.employees.all()):
-                return True
-        return False
-
-    return is_holiday
-
-
-def _leave_checker(employee_ids, start, end):
-    from leave.models import LeaveRequest
-
-    spans = defaultdict(list)
-    for lr in LeaveRequest.objects.filter(
-        employee_id__in=employee_ids,
-        status__in=["approved", "cancel_requested"],
-        start_date__lte=end,
-    ).filter(Q(end_date__gte=start) | Q(end_date__isnull=True)):
-        spans[lr.employee_id_id].append((lr.start_date, lr.end_date or lr.start_date))
-
-    return lambda emp, d: any(s <= d <= e for s, e in spans.get(emp.pk, ()))
-
-
-def process_range(start, end, employees=None):
-    """
-    (Re)build daily rows from raw punches for ``start..end`` (capped at today).
-    Idempotent. Approved days and HR-corrected days are never touched.
-    """
+def _check_range(start, end):
     if end < start:
         raise AttendanceError("End date is before start date.")
     if (end - start).days + 1 > MAX_RANGE_DAYS:
         raise AttendanceError(f"Choose a range of at most {MAX_RANGE_DAYS} days.")
-    end = min(end, today())
-    stats = {"created": 0, "updated": 0, "skipped_locked": 0, "days": 0}
-    if end < start:
-        return stats
-    emps = list(employees if employees is not None else employees_for_attendance())
-    if not emps:
-        return stats
 
+
+def classify_range(employees, start, end):
+    """
+    {(employee_id, date): DayInfo} for every day that has punches, using the attendance rules.
+    The day is the calendar date (Africa/Lagos) of the punch. Days before joining or after the
+    contract end are ignored. Nothing is written.
+    """
+    _check_range(start, end)
+    end = min(end, today())
+    employees = list(employees)
+    result = {}
+    if end < start or not employees:
+        return result
     tz = attendance_tz()
     lo = datetime.combine(start, time.min, tzinfo=tz) - timedelta(days=1)
     hi = datetime.combine(end, time.max, tzinfo=tz) + timedelta(days=1)
     punches = defaultdict(list)
     for t in RawTransaction.objects.filter(
-        employee__in=emps, attendance_timestamp__range=(lo, hi)
+        employee__in=employees, attendance_timestamp__range=(lo, hi)
     ).only("employee_id", "attendance_timestamp", "source_timezone"):
-        local = t.attendance_timestamp.astimezone(
-            ZoneInfo(t.source_timezone) if t.source_timezone else tz
-        )
+        local = t.attendance_timestamp.astimezone(ZoneInfo(t.source_timezone) if t.source_timezone else tz)
         if start <= local.date() <= end:
-            punches[(t.employee_id, local.date())].append((local, t.attendance_timestamp))
-
-    existing = {
-        (d.employee_id, d.date): d
-        for d in DailyAttendance.objects.filter(employee__in=emps, date__range=(start, end))
-    }
+            punches[(t.employee_id, local.date())].append(local)
     rules = RuleResolver()
-    is_holiday = _holiday_checker(start, end)
-    on_leave = _leave_checker([e.pk for e in emps], start, end)
-
-    for emp in emps:
+    by_id = {e.pk: e for e in employees}
+    for (emp_id, day), items in punches.items():
+        emp = by_id[emp_id]
         wi = getattr(emp, "employee_work_info", None)
-        joined = getattr(wi, "date_joining", None)
-        left = getattr(wi, "contract_end_date", None)
+        joined, left = getattr(wi, "date_joining", None), getattr(wi, "contract_end_date", None)
+        if (joined and day < joined) or (left and day > left):
+            continue
+        items.sort()
         rule = rules.for_employee(emp)
-        window = rule.window_list() if rule else []
-        weekdays = rule.weekday_set() if rule else FALLBACK_WEEKDAYS
-        for d in calculators.daterange(start, end):
-            if (joined and d < joined) or (left and d > left):
-                continue
-            row = existing.get((emp.pk, d))
-            if row and (row.is_locked or row.source == "correction"):
-                stats["skipped_locked"] += 1
-                continue
-            items = sorted(punches.get((emp.pk, d), []), key=lambda p: p[1])
-            status, flags = calculators.classify(
-                [p[0].time() for p in items],
-                window=window,
-                working_weekday=d.weekday() in weekdays,
-                is_holiday=is_holiday(emp, d),
-                on_leave=on_leave(emp, d),
-            )
-            values = {
-                "status": status,
-                "raw_count": len(items),
-                "first_punch": items[0][1] if items else None,
-                "last_punch": items[-1][1] if items else None,
-                "flags": flags,
-            }
-            stats["days"] += 1
-            if row:
-                for k, v in values.items():
-                    setattr(row, k, v)
-                row.save()
-                stats["updated"] += 1
-            else:
-                try:
-                    with transaction.atomic():
-                        DailyAttendance.objects.create(employee=emp, date=d, **values)
-                    stats["created"] += 1
-                except IntegrityError:
-                    # A concurrent run created it first; update instead.
-                    DailyAttendance.objects.filter(employee=emp, date=d, approval__isnull=True).exclude(
-                        source="correction"
-                    ).update(**values)
-                    stats["updated"] += 1
+        status, flags = calculators.classify([p.time() for p in items], rule.window_list() if rule else [])
+        result[(emp_id, day)] = DayInfo(status, flags, len(items), items[0], items[-1])
+    return result
+
+
+def _create_attendance(emp, day, info):
+    """One ordinary (unvalidated) Horilla Attendance record for a worker's day."""
+    wi = getattr(emp, "employee_work_info", None)
+    clock_out = None
+    if info.count > 1 and info.last - info.first >= MIN_GAP_FOR_CHECKOUT:
+        clock_out = info.last
+    return Attendance.objects.create(
+        employee_id=emp,
+        attendance_date=day,
+        attendance_clock_in_date=info.first.date(),
+        attendance_clock_in=info.first.time().replace(microsecond=0),
+        attendance_clock_out_date=clock_out.date() if clock_out else None,
+        attendance_clock_out=clock_out.time().replace(microsecond=0) if clock_out else None,
+        shift_id=getattr(wi, "shift_id", None),
+        work_type_id=getattr(wi, "work_type_id", None),
+        attendance_validated=False,
+    )
+
+
+def process_range(start, end, employees=None):
+    """
+    Add one Horilla Attendance record (waiting for validation) for every worker-day with a valid
+    punch that has no record yet. Existing records (validated or not, manual or earlier) are never
+    touched, so it is safe to run again after each upload. Returns counts and the days that need
+    attention (outside the windows, or punches in two shifts), which are NOT added.
+    """
+    emps = list(employees if employees is not None else employees_for_attendance())
+    days = classify_range(emps, start, end)
+    by_id = {e.pk: e for e in emps}
+    existing = set(
+        Attendance.objects.filter(employee_id__in=by_id, attendance_date__range=(start, end)).values_list("employee_id", "attendance_date")
+    )
+    stats = {"created": 0, "already_there": 0, "attention": []}
+    for (emp_id, day), info in sorted(days.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        if info.status == calculators.ATTENTION:
+            if (emp_id, day) not in existing:
+                stats["attention"].append((by_id[emp_id], day, info))
+            continue
+        if (emp_id, day) in existing:
+            stats["already_there"] += 1
+            continue
+        try:
+            with transaction.atomic():
+                _create_attendance(by_id[emp_id], day, info)
+            stats["created"] += 1
+        except IntegrityError:  # created by a concurrent run
+            stats["already_there"] += 1
     return stats
 
 
-@transaction.atomic
-def correct(employee, day, new_status, reason, user):
-    """HR correction of one day. Reason is mandatory; approved days must be reopened first."""
-    reason = (reason or "").strip()
-    if not reason:
-        raise AttendanceError("A reason is required for every correction.")
-    if new_status not in CORRECTABLE:
-        raise AttendanceError("That status cannot be set by hand.")
-    if day > today():
-        raise AttendanceError("Future dates cannot be marked.")
-    row = DailyAttendance.objects.select_for_update().filter(employee=employee, date=day).first()
-    if row is None:
-        row = DailyAttendance.objects.create(employee=employee, date=day, status=new_status, source="correction")
-        old = ""
-    else:
-        if row.is_locked:
-            raise AttendanceError("This day is in an approved period. Reopen the period first.")
-        old = row.status
-    row.status, row.source = new_status, "correction"
-    row.save()
-    AttendanceCorrection.objects.create(
-        daily=row, old_status=old, new_status=new_status, reason=reason, user=user
-    )
-    return row
-
-
-@transaction.atomic
-def bulk_mark_missing_absent(employees, start, end, reason, user):
-    rows = DailyAttendance.objects.filter(
-        employee__in=list(employees), date__range=(start, end), status=MISSING, approval__isnull=True
-    )
-    n = 0
-    for row in rows:
-        correct(row.employee, row.date, ABSENT, reason, user)
-        n += 1
-    return n
-
-
-@transaction.atomic
-def approve(start, end, user, department=None):
-    if end < start:
-        raise AttendanceError("End date is before start date.")
-    rows = DailyAttendance.objects.select_for_update().filter(
-        date__range=(start, end), approval__isnull=True
-    )
-    if department:
-        rows = rows.filter(employee__employee_work_info__department_id=department)
-    rows = list(rows.select_related("employee"))
-    if not rows:
-        raise AttendanceError("There is no unapproved attendance in this range. Process it first.")
-    blockers = [r for r in rows if r.status in UNRESOLVED]
-    if blockers:
-        raise ApprovalBlocked(blockers)
-    approval = AttendanceApproval.objects.create(
-        start_date=start, end_date=end, department=department, approved_by=user,
-        day_count=len(rows),
-    )
-    DailyAttendance.objects.filter(pk__in=[r.pk for r in rows]).update(approval=approval)
-    return approval
-
-
-@transaction.atomic
-def reopen(approval, user, reason):
-    reason = (reason or "").strip()
-    if not reason:
-        raise AttendanceError("A reason is required to reopen approved attendance.")
-    approval = AttendanceApproval.objects.select_for_update().get(pk=approval.pk)
-    if approval.status != AttendanceApproval.APPROVED:
-        raise AttendanceError("This approval is already reopened.")
-    approval.days.update(approval=None)
-    approval.status = AttendanceApproval.REOPENED
-    approval.reopened_by, approval.reopened_at, approval.reopen_reason = (
-        user, timezone.now(), reason,
-    )
-    approval.save()
-    return approval
+def accept_day(employee, day):
+    """HR decided a flagged day is real attendance: add it (waiting for validation)."""
+    days = classify_range([employee], day, day)
+    info = days.get((employee.pk, day))
+    if info is None:
+        raise AttendanceError("There are no punches for that worker on that day.")
+    if Attendance.objects.filter(employee_id=employee, attendance_date=day).exists():
+        raise AttendanceError("That day already has an attendance record.")
+    return _create_attendance(employee, day, info)

@@ -1,9 +1,0 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "weekly_payroll/_nav.html" %}
-<h2>{% trans "Loan repayment agreements" %}</h2>
-{% if can_add %}<a class="oh-btn oh-btn--secondary" href="{% url 'wp-loan-new' %}">{% trans "New agreement" %}</a>{% endif %}
-<table class="oh-table" style="width:100%;margin-top:1rem"><thead><tr><th>{% trans "Employee" %}</th><th>{% trans "Loan" %}</th><th>{% trans "Frequency" %}</th><th>{% trans "Instalment" %}</th><th>{% trans "First due" %}</th><th>{% trans "Outstanding" %}</th><th>{% trans "Status" %}</th><th></th></tr></thead>
-{% for a in agreements %}<tr><td>{{ a.loan.employee_id }}</td><td>{{ a.loan.title }} (₦{{ a.loan.loan_amount|floatformat:2 }})</td><td>{{ a.get_frequency_display }}</td><td>₦{{ a.instalment_amount|floatformat:2 }}</td><td>{{ a.first_due_date }}</td><td>₦{{ a.outstanding|floatformat:2 }}</td><td>{{ a.get_status_display }}</td>
-<td>{% if can_approve and a.status == "pending" %}<form method="post" action="{% url 'wp-loan-approve' a.pk %}">{% csrf_token %}<button class="oh-btn oh-btn--success">{% trans "Approve" %}</button></form>{% endif %}
-{% if can_approve and a.status == "approved" %}<form method="post" action="{% url 'wp-loan-adjust' a.pk %}" style="display:flex;gap:.25rem">{% csrf_token %}<select name="kind"><option value="settlement">{% trans "Early settlement" %}</option><option value="adjustment">{% trans "Adjustment" %}</option></select><input name="amount" size="8" placeholder="₦"><input name="note" required placeholder="{% trans 'Note' %}"><button class="oh-btn oh-btn--light">{% trans "Record" %}</button></form>{% endif %}</td></tr>
-{% empty %}<tr><td colspan="8">{% trans "None." %}</td></tr>{% endfor %}</table>
-</section>{% endblock %}

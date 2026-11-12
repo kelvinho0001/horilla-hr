@@ -1,8 +1,22 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "bank_export/_nav.html" %}
-<h2>{% trans "Bank list" %}</h2>
-{% if can_upload %}<form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary">{% trans "Upload" %}</button></form>{% endif %}
-{% if report %}<p>{{ report.created }} {% trans "added" %}, {{ report.updated }} {% trans "updated" %}{% if report.duplicates_in_file %}, {{ report.duplicates_in_file }} {% trans "repeated codes in file (last kept)" %}{% endif %}</p>
-{% if report.errors %}<ul style="color:#b00020">{% for n,m in report.errors %}<li>{% trans "Row" %} {{ n }}: {{ m }}</li>{% endfor %}</ul>{% endif %}{% endif %}
-<table class="oh-table" style="width:100%;margin-top:1rem"><thead><tr><th>{% trans "Code" %}</th><th>{% trans "Name" %}</th><th>{% trans "Active" %}</th></tr></thead>
-{% for b in banks %}<tr><td>{{ b.code }}</td><td>{{ b.name }}</td><td>{{ b.is_active }}</td></tr>{% empty %}<tr><td colspan="3">{% trans "No banks yet. Upload the list." %}</td></tr>{% endfor %}</table>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Bank list" %}{% endblock %}
+{% block page_tabs %}{% include "bank_export/_nav.html" %}{% endblock %}
+{% block page_body %}
+{% if can_upload %}
+<div class="dm-form-card mb-4" style="max-width: 760px;">
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% include "demiller/_form_fields.html" with cols=12 %}
+    <div class="d-flex flex-row-reverse"><button class="oh-btn oh-btn--secondary">{% trans "Upload" %}</button></div>
+  </form>
+  {% if report %}<hr><p class="mb-1">{{ report.created }} {% trans "added" %}, {{ report.updated }} {% trans "updated" %}{% if report.duplicates_in_file %}, {{ report.duplicates_in_file }} {% trans "repeated codes in the file (last one kept)" %}{% endif %}</p>
+  {% if report.errors %}<ul class="text-danger mb-0">{% for n,m in report.errors %}<li>{% trans "Row" %} {{ n }}: {{ m }}</li>{% endfor %}</ul>{% endif %}{% endif %}
+</div>
+{% endif %}
+<div class="oh-sticky-table"><div class="oh-sticky-table__table">
+  <div class="oh-sticky-table__thead"><div class="oh-sticky-table__tr"><div class="oh-sticky-table__th">{% trans "Code" %}</div><div class="oh-sticky-table__th">{% trans "Name" %}</div><div class="oh-sticky-table__th">{% trans "Active" %}</div></div></div>
+  <div class="oh-sticky-table__tbody">
+    {% for b in banks %}<div class="oh-sticky-table__tr"><div class="oh-sticky-table__sd">{{ b.code }}</div><div class="oh-sticky-table__td">{{ b.name }}</div><div class="oh-sticky-table__td">{% if b.is_active %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</div></div>
+    {% empty %}<div class="oh-sticky-table__tr"><div class="oh-sticky-table__td" style="grid-column:1/-1">{% trans "No banks yet. Upload the list above." %}</div></div>{% endfor %}
+  </div>
+</div></div>
+{% endblock %}

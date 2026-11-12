@@ -1,6 +1,22 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
-<h2>{% trans "Import" %} #{{ batch.pk }} — {{ batch.get_status_display }}</h2>
-<p>{{ batch.provider }} · {{ batch.file_name }} · {{ batch.started_at }}</p>
-<ul><li>{% trans "Received" %}: {{ batch.received_count }}</li><li>{% trans "Imported" %}: {{ batch.imported_count }}</li><li>{% trans "Duplicates" %}: {{ batch.duplicate_count }}</li><li>{% trans "Unmapped" %}: {{ batch.unmapped_count }}</li><li>{% trans "Failed" %}: {{ batch.failed_count }}</li></ul>
-{% if batch.errors %}<h3>{% trans "Errors" %}</h3><table class="oh-table"><tr><th>{% trans "Row" %}</th><th>{% trans "Problem" %}</th></tr>{% for e in batch.errors %}<tr><td>{{ e.row|default:"—" }}</td><td>{{ e.message }}</td></tr>{% endfor %}</table>{% endif %}
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Import" %} #{{ batch.pk }}{% endblock %}
+{% block page_tabs %}{% include "biometric_integration/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="dm-form-card mb-4">
+  <p class="mb-2"><span class="oh-dot oh-dot--{% if batch.status == 'success' %}success{% elif batch.status == 'partial' %}warning{% else %}danger{% endif %}"></span> <b>{{ batch.get_status_display }}</b> · {{ batch.provider }} · {{ batch.file_name|default:"—" }} · {{ batch.started_at|date:"d M Y H:i" }}</p>
+  <div class="row">
+    <div class="col-6 col-md-2"><small class="text-muted">{% trans "Received" %}</small><div class="h5">{{ batch.received_count }}</div></div>
+    <div class="col-6 col-md-2"><small class="text-muted">{% trans "New" %}</small><div class="h5">{{ batch.imported_count }}</div></div>
+    <div class="col-6 col-md-2"><small class="text-muted">{% trans "Duplicates" %}</small><div class="h5">{{ batch.duplicate_count }}</div></div>
+    <div class="col-6 col-md-2"><small class="text-muted">{% trans "Unmapped" %}</small><div class="h5">{{ batch.unmapped_count }}</div></div>
+    <div class="col-6 col-md-2"><small class="text-muted">{% trans "Errors" %}</small><div class="h5">{{ batch.failed_count }}</div></div>
+  </div>
+</div>
+{% if batch.errors %}
+<h5 class="fw-bold mb-2">{% trans "Problems" %}</h5>
+<div class="oh-sticky-table"><div class="oh-sticky-table__table">
+  <div class="oh-sticky-table__thead"><div class="oh-sticky-table__tr"><div class="oh-sticky-table__th">{% trans "Row" %}</div><div class="oh-sticky-table__th">{% trans "Problem" %}</div></div></div>
+  <div class="oh-sticky-table__tbody">{% for e in batch.errors %}<div class="oh-sticky-table__tr"><div class="oh-sticky-table__sd">{{ e.row|default:"—" }}</div><div class="oh-sticky-table__td">{{ e.message }}</div></div>{% endfor %}</div>
+</div></div>
+{% endif %}
+{% endblock %}

@@ -1,7 +1,8 @@
-{% load i18n %}
-<div style="margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
-  <a class="oh-btn oh-btn--light" href="{% url 'bx-dashboard' %}">{% trans "Bank export" %}</a>
-  {% if perms.bank_export.view_bank_accounts %}<a class="oh-btn oh-btn--light" href="{% url 'bx-accounts' %}">{% trans "Worker bank accounts" %}</a>{% endif %}
-  {% if perms.bank_export.view_bank %}<a class="oh-btn oh-btn--light" href="{% url 'bx-banks' %}">{% trans "Bank list" %}</a>{% endif %}
-</div>
-{% if messages %}{% for m in messages %}<p style="padding:.5rem;background:#f3f3f3;">{{ m }}</p>{% endfor %}{% endif %}
+{% load i18n %}{% with n=request.resolver_match.url_name %}
+<div class="oh-tabs">
+    <ul class="oh-tabs__tablist">
+      <li class="oh-tabs__tab {% if n == 'bx-dashboard' or n == 'bx-run' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bx-dashboard' %}" class="text-reset">{% trans "Payment files" %}</a></li>
+      {% if perms.bank_export.view_bank_accounts %}<li class="oh-tabs__tab {% if n == 'bx-accounts' or n == 'bx-account-edit' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bx-accounts' %}" class="text-reset">{% trans "Worker bank accounts" %}</a></li>{% endif %}
+      {% if perms.bank_export.view_bank %}<li class="oh-tabs__tab {% if n == 'bx-banks' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bx-banks' %}" class="text-reset">{% trans "Bank list" %}</a></li>{% endif %}
+    </ul>
+</div>{% endwith %}

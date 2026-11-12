@@ -72,6 +72,14 @@ def import_banks(rows):
 
 
 # ------------------------------------------------------------ worker accounts
+_NOISE = re.compile(r"\b(plc|ltd|limited|bank|nigeria|nig|mfb|microfinance)\b")
+
+
+def _norm(text):
+    """'Guaranty Trust Bank Plc' and 'guaranty trust' compare equal; punctuation and case do not matter."""
+    return re.sub(r"[^a-z0-9]+", "", _NOISE.sub(" ", (text or "").lower()))
+
+
 def resolve_bank(employee):
     """(bank, account_number, issues) for an employee, from the link, else by code or name."""
     details = EmployeeBankDetails.objects.filter(employee_id=employee).select_related("bank_link__bank").first()
@@ -86,6 +94,9 @@ def resolve_bank(employee):
             bank = Bank.objects.filter(code=details.any_other_code1.strip()).first()
         if bank is None and details.bank_name:
             bank = Bank.objects.filter(name__iexact=details.bank_name.strip()).first()
+            if bank is None and _norm(details.bank_name):
+                same = [b for b in Bank.objects.all() if _norm(b.name) == _norm(details.bank_name)]
+                bank = same[0] if len(same) == 1 else None
     if bank is None:
         issues.append("Bank not selected from the bank list")
     elif not bank.is_active:
@@ -113,6 +124,14 @@ def save_worker_bank(employee, bank, account_number):
     details.save()
     EmployeeBankLink.objects.update_or_create(details=details, defaults={"bank": bank})
     return details
+
+
+def record_text(employee):
+    """What the employee record (Employee > Bank details) says, as typed: (bank name, bank code, account number)."""
+    d = EmployeeBankDetails.objects.filter(employee_id=employee).first()
+    if d is None:
+        return "", "", ""
+    return (d.bank_name or "").strip(), (d.any_other_code1 or "").strip(), (d.account_number or "").strip()
 
 
 def mask(acct):

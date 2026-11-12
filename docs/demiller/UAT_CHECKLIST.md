@@ -20,31 +20,28 @@ Roles: log in as a different user for each role.
 | B4 | Same ID mapped to two employees | refused | |
 | B5 | Report with a bad date / future date | reported, other rows still import | |
 
-## C. Attendance (HR Officer, then Approver)
+## C. Attendance (HR Officer, Approver)
 | # | Check | Expected | Pass |
 |---|---|---|---|
-| C1 | Process a range (days to days, and month to month) | one status per worker per day | |
-| C2 | Worker with 2 punches in one day | counts as 1 present day | |
-| C3 | Day with no punch | Missing (needs review); future days untouched | |
-| C4 | Approved leave / public holiday / rest day | not Missing | |
-| C5 | Punch outside the attendance window | Review, not discarded | |
-| C6 | Correct a day without a reason | refused; with a reason: saved and shown in history | |
-| C7 | HR Officer tries to approve | not allowed | |
-| C8 | Approver approves while Missing/Review remain | blocked until resolved | |
-| C9 | Approved day: try to correct / re-process | locked | |
-| C10 | Approver reopens with a reason | days editable again; reopen recorded | |
+| C1 | Biometric Attendance > Add punches to Attendances (days to days, and month to month) | one Horilla attendance record per worker per day, waiting for validation | |
+| C2 | Worker with 2 punches in one day | one record | |
+| C3 | Same range processed again | nothing duplicated; validated records untouched | |
+| C4 | Punch outside the attendance windows / punches in two shifts | not added; red dot; "Add to Attendances anyway" works | |
+| C5 | Attendance > Attendances > Attendance To Validate | the records are there; bulk validate works for an HR Officer | |
+| C6 | Create an attendance by hand in Attendances and validate it | it appears green on Biometric Attendance and counts in payroll | |
+| C7 | Future days, days before joining, workers with no mapping | nothing added | |
 
-## D. Payroll (HR Officer, Approver, Management)
+## D. Payroll (HR Officer, Approver)
 | # | Check | Expected | Pass |
 |---|---|---|---|
-| D1 | Pay profile proposed by HR, approved by Management | only approved profile is used | |
+| D1 | Basic salary set on Employee > Work information | the run uses it; changing it and pressing Recalculate changes the amount | |
 | D2 | Create a run for any date range with working days | each worker's amount = days / working days x basic - fines - IOU, to the kobo | |
 | D3 | Compare 3 workers with the manual sheet | identical | |
-| D4 | Present-but-unapproved attendance | flagged, not counted | |
-| D5 | Change one worker's working days | amount updates; reviewed run returns to draft | |
-| D6 | Fine: HR issues, Management approves | deducted in full in the first approved run only; unapproved fines never | |
-| D7 | Monthly loan (e.g. 20,000) with weekly runs | not deducted in weekly runs; deducted once in the run covering the due date | |
-| D8 | Loan balance never goes below 0; early settlement needs a note | as stated | |
+| D4 | Attendance still waiting for validation | flagged on the line, not counted | |
+| D5 | Change one worker's working days | amount updates; a reviewed run goes back to draft | |
+| D6 | Fine created in Payroll > Loans (Fine tab, 1 instalment) | in the FINES column in full, once; the loan shows Settled after the run is approved | |
+| D7 | Loan / salary advance (monthly instalments) | only instalments due on or before the run's end are taken; never twice; never by an overlapping run | |
+| D8 | Worker with no basic salary | flagged; Mark reviewed refused | |
 | D9 | HR Officer tries to approve payroll | not allowed; Approver can | |
 | D10 | Approved run: recalculate / edit | refused | |
 | D11 | Download Excel at draft and at approved | draft marked DRAFT; layout matches the template; formulas recalculate in Excel | |

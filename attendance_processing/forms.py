@@ -2,16 +2,17 @@ from django import forms
 from django.forms import inlineformset_factory
 from django.utils.translation import gettext_lazy as _
 
+from base.forms import ModelForm
+
 from .models import AttendanceRule, AttendanceRuleWindow
 
+TIME = {"type": "time", "class": "oh-input w-100"}
 
-class RuleForm(forms.ModelForm):
+
+class RuleForm(ModelForm):
     class Meta:
         model = AttendanceRule
-        fields = [
-            "name", "scope", "department", "shift", "employee_type", "employee",
-            "working_weekdays", "is_active",
-        ]
+        fields = ["name", "scope", "department", "shift", "employee_type", "employee", "is_active"]
 
 
 class BaseWindowFormSet(forms.BaseInlineFormSet):
@@ -31,6 +32,5 @@ class BaseWindowFormSet(forms.BaseInlineFormSet):
 WindowFormSet = inlineformset_factory(
     AttendanceRule, AttendanceRuleWindow, formset=BaseWindowFormSet, fields=("start", "end"),
     extra=2, can_delete=True,
-    widgets={"start": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
-             "end": forms.TimeInput(attrs={"type": "time"}, format="%H:%M")},
+    widgets={"start": forms.TimeInput(attrs=TIME, format="%H:%M"), "end": forms.TimeInput(attrs=TIME, format="%H:%M")},
 )

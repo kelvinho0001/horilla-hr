@@ -42,9 +42,14 @@ uses "Device <serial>" automatically; rename it in Django admin if you like).
 
 ### Getting attendance in (no Time.Net needed)
 1. At the device: copy the attendance file to a USB drive (it is named `<serial>_attlog.dat`).
-2. **Attendance > Biometric Import > Upload report**: choose the `.dat` file. (For a file you renamed, pick the device in the list.)
-3. Uploading the same file again, or a newer file that contains the old records too, is safe: only new punches are added.
-Each line is `ID, date-time` plus four device codes that attendance does not use (they are kept in the raw record).
+2. **Attendance > Biometric Import > Upload attendance**: choose the `.dat` file. (For a file you renamed, pick the device in the list.)
+   Uploading the same file again, or a newer file that repeats old punches, is safe: only new punches are added.
+3. **Attendance > Biometric Attendance**: choose the dates (any range, or whole months) and press **Add punches to Attendances**.
+   This creates one ordinary Horilla attendance record per worker per day (waiting for validation). Run it again after each upload; it never touches existing records.
+4. **Attendance > Attendances** (Horilla's own page): the **Attendance To Validate** tab lists them. Select and validate in bulk. You can also **Create** attendance by hand there.
+   **Payroll counts validated days only** (including ones you added by hand).
+5. Days with punches outside the attendance windows (or in two shifts) are not added; they appear as red dots on Biometric Attendance. Open the day and **Add to Attendances anyway** if it is genuine.
+Each line of the device file is `ID, date-time` plus four device codes that attendance does not use (kept in the raw record).
 
 ### Putting the workers in Horilla (one time, then for new starters)
 1. Copy `user.dat` (the user list) from the contract device to USB.
@@ -84,19 +89,18 @@ Menu names can differ slightly by Horilla version.
 | 3 | Biometric Import > Worker sheet, then Employees > Import | Workers with Badge ID = biometric ID (section 2). Departments and worker categories come with it. |
 | 4 | Leave / Attendance > Holidays | Public holidays, and leave types if you use leave. Approved leave and holidays are not counted as "missing". |
 | 5 | Settings > Roles and Permissions | Create logins for staff (they are Employees with an email) and add each to **one** group: **HR Officer**, **HR/Payroll Approver**, **Management**, **Accountant**, **IT Administrator**. Make sure the assignment is **for your company** (Horilla applies group rights per company). Keep the approver and Management groups small. |
-| 6 | Attendance > Weekly Attendance Review > Rules | A global rule with the **attendance windows** and working weekdays (Mon=0 ... Sun=6). A rule can have several windows. For the contract device use two: **00:00-09:00** (night shift) and **14:00-20:00** (afternoon shift). A punch outside both goes to review; a worker with a punch in both windows on one date also goes to review (nobody should work two shifts in a day). Add department rules only where they differ. With **no** rule any punch counts and Mon-Sat are working days. |
+| 6 | Attendance > Biometric Attendance > Attendance rules | A global rule with the **attendance windows**. A rule can have several windows. For the contract device use two: **00:00-09:00** (night shift) and **14:00-20:00** (afternoon shift). A punch outside both is flagged instead of added; a worker with a punch in both windows on one date is flagged too (nobody should work two shifts in a day). Add department rules only where they differ. With **no** rule any punch time counts. |
 | 7 | Attendance > Biometric Import | Upload a real week, map IDs. |
 | 8 | Payroll > Bank Export > Bank list | Already loaded (87 banks). Check `044` shows its zero. |
-| 9 | Payroll > Bank Export > Worker bank accounts | Each worker: pick the bank from the drop-down and enter the 10-digit account number. Everyone shows OK before an export. |
-| 10 | Payroll > Weekly Payroll > Pay profiles | HR enters each worker's **full-month basic salary**; **Management approves** it. Unapproved profiles are ignored. |
-| 11 | Payroll > Weekly Payroll > Fines | Create fine types (name + default amount) if you want presets. |
-| 12 | Payroll > Loans, then Weekly Payroll > Loan agreements | Create the loan in Horilla's Loans first, then add the agreement (weekly or monthly instalment, first due date); Management approves. |
+| 9 | Payroll > Bank Export > Worker bank accounts | Lists every employee with what their Employee > Bank details say and the bank it matched. Fix anyone not OK: pick the bank from the drop-down and enter the 10-digit account number. |
+| 10 | Employee > Work information | **Basic Salary** (full month) on every worker. This is what payroll uses; there is no separate pay-profile screen. (The worker-sheet/import can fill it too.) |
+| 11 | Payroll > Loans (Horilla's own page) | Loans, salary advances and fines are created here (tabs Loan / Salary Advance / Fine): amount, number of instalments, instalment start date. Payroll reads them. A fine with one instalment is taken in full by the first payroll run that ends on or after its date. |
 | 13 | Server | HTTPS only (`SECURE_SSL_REDIRECT=True`), **nightly backup cron** (DEPLOYMENT.md section 10) and a copy of backups kept **off the server**, admin password changed, `TIME_ZONE=Africa/Lagos`. |
 | 14 | Branding | Section 5. |
 
-Who does what in a pay cycle: IT/HR uploads attendance > HR Officer processes and corrects > **Approver** approves attendance >
+Who does what in a pay cycle: IT/HR uploads attendance > HR Officer adds the punches to Attendances and **validates** them (Horilla's page) >
 HR Officer creates the payroll run (enters working days) and marks it reviewed > **Approver** approves payroll > **Accountant**
-generates the bank file, uploads it to the bank, marks it paid.
+generates the bank file, uploads it to the bank, marks it paid. Fines, loans and salary advances are entered by HR in Horilla's Payroll > Loans.
 
 ---
 
@@ -126,18 +130,19 @@ This writes `test_employees.csv` (4 test workers TST001-TST004) and `test_attend
 
 **2. Import the workers:** Employees > Import > `test_employees.csv`. Expect "4 imported".
 
-**3. Upload attendance:** Biometric Import > Upload `test_attendance.csv`. Expect 79 rows imported, **1 error** (the bad date, with its row number) and **unmapped IDs** TST001-TST004 and TST999. Upload the **same file again**: expect **0 new** (all duplicates).
+**3. Upload attendance:** Biometric Import > Upload `test_attendance.csv`. Expect 79 rows imported, **1 error** (the bad date, with its row number) and **unmapped IDs** TST001-TST004 and TST999. Upload the **same file again**: expect **0 new** (all duplicates). (The file is not named `<serial>_attlog.dat`, so choose or create the device when asked, or rename it to e.g. `TESTDEVICE_attlog.dat` and upload it as a `.dat`: it then files itself under "Device TESTDEVICE".)
 
-**4. Map IDs:** Unmapped IDs > **Map** TST001-TST004 (each is suggested). Leave TST999 unmapped.
+**4. Map IDs:** Unmapped IDs > **Map all matching IDs** (the four TST IDs equal their Badge IDs). Leave TST999 unmapped, or **Ignore** it with a reason.
 
-**5. Process attendance:** Weekly Attendance Review > range = the 28 days printed in step 1 > **Process**. Each worker shows P (present), R (Sunday, rest), and **?** (missing) on the other days. Use **Mark all missing as absent** with a reason (the test workers really were absent those days). Try the same range with "from month / to month" too. Click a day: you see the raw punches. Check TST001 on the first day: two punches, still **one** present day.
-* *Try this as an HR Officer:* **Approve range** must not be available. Log in as an **Approver** and approve. Now try to correct a day: it is locked. Reopen (reason required), then approve again.
+**5. Add the punches to Attendances:** Attendance > Biometric Attendance > range = the 28 days printed in step 1 > **Add punches to Attendances**. Expect 77 records (15+19+19+24), all amber (waiting). Try "from month / to month" too. Click a day to see the raw punches. TST001's first day has two punches and is still **one** record.
+* Open **Attendance > Attendances**: the same records are in **Attendance To Validate**. Select all and **validate** (log in as an HR Officer: the validate action is available to them). They turn green on Biometric Attendance.
+* Try **Create** on Attendances: add one day by hand for TST004 and validate it: payroll will count it (it changes TST004's total, so delete it again before comparing with the table below).
 
-**6. Pay profiles:** HR Officer adds basic salaries: TST001 70,000, TST002 55,000, TST003 70,000, TST004 70,000. As **Management**, approve them.
+**6. Basic salaries:** Employee > Work information: TST001 70,000, TST002 55,000, TST003 70,000, TST004 70,000. (The test import file already carries them in its Basic Salary column; check they are there.)
 
-**7. Fines:** HR Officer issues: TST001 5,000, TST002 4,500, TST003 2,300. Management approves them. (Before approval nothing is deducted.)
+**7. Fines:** Payroll > Loans > **Fine** tab > Create: TST001 5,000, TST002 4,500, TST003 2,300, **1 instalment**, start date inside the 28 days.
 
-**8. Loans:** In Payroll > Loans create loans: TST001 20,000, TST002 15,000, TST003 23,000 (1 instalment, any dates). Then Loan agreements > New: **monthly**, instalment = the full amount, **first due date inside the 28 days**. Management approves.
+**8. Loans:** Payroll > Loans > **Loan** tab > Create: TST001 20,000, TST002 15,000, TST003 23,000, **1 instalment**, start date inside the 28 days (a Salary Advance in the **Salary Advance** tab counts in the IOU column the same way).
 
 **9. Payroll run:** Weekly Payroll > New run: start and end = the 28 days, **default working days 28**. Set **TST004 to 24** (working days column). Expected result:
 
@@ -154,11 +159,12 @@ Formula: `ROUND(days ÷ working days × basic, 2) − fines − IOU`. TST002: 19
 **10. Check the controls:**
 * Download Excel now: file name has **-DRAFT**, RUN INFO says NOT APPROVED. Open it in Excel: the numbers recalculate to the same values.
 * Change one worker's working days: the amount changes and a "reviewed" run goes back to draft.
-* **Mark reviewed** (HR Officer), then try **Approve** as HR Officer: refused. Approve as **Approver**: the run locks and fines/IOU are used up.
+* **Mark reviewed** (HR Officer), then try **Approve** as HR Officer: refused. Approve as **Approver**: the run locks, and the fines/loans become **Settled** in Payroll > Loans.
 * Make a **second run** over the same days: it shows **no fines and no IOU** (already deducted) and cannot be approved while overlapping the first.
-* A **weekly run** for a short period before the loan's due date shows IOU 0 (monthly loans are not taken weekly).
+* A run that ends **before** a loan's instalment date shows IOU 0 (monthly instalments are only taken when due).
+* Remove a worker's basic salary on the employee record and press **Recalculate**: the line is flagged and **Mark reviewed** is refused until it is fixed.
 
-**11. Bank export:** Worker bank accounts: give TST001-TST003 a bank and a test account number (e.g. `0123456789`, `0000000042`: keep the leading zero case), leave TST004 without. As **Accountant**: Bank Export > the run. Expect **TST004 listed as a problem** and the export blocked; tick "export valid workers only" (or add the account) and generate. Open the file: **PAYMENT SCHEDULE** has the right bank codes, account numbers with their leading zeros, amounts, and the narration; the count/total equal the payroll (excluding the left-out worker). A second export is refused; **Supersede** (Approver, reason) lets you regenerate; **Mark paid** is final.
+**11. Bank export:** Payroll > Bank Export > Worker bank accounts lists every employee with what their record says. Give TST001-TST003 a bank and a test account number (e.g. `0123456789`, `0000000042`: keep the leading zero case), leave TST004 without. As **Accountant**: Bank Export > the run. Expect **TST004 listed as a problem** and the export blocked; tick "export valid workers only" (or add the account) and generate. Open the file: **PAYMENT SCHEDULE** has the right bank codes, account numbers with their leading zeros, amounts, and the narration; the count/total equal the payroll (excluding the left-out worker). A second export is refused; **Supersede** (Approver, reason) lets you regenerate; **Mark paid** is final.
 
 **12. Undo the rehearsal** (restore the copy as described above).
 

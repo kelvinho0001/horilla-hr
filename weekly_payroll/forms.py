@@ -1,17 +1,27 @@
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
-from .models import Fine, FineType, LoanAgreement, PayrollRun, WorkerPayProfile
-from payroll.models.models import LoanAccount
+from base.forms import ModelForm
+
+from .models import PayrollRun
 
 
-class RunForm(forms.ModelForm):
+class RunForm(ModelForm):
     start_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
     end_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
 
     class Meta:
         model = PayrollRun
-        fields = ["name", "start_date", "end_date", "default_working_days", "narration", "department"]
+        fields = ["name", "start_date", "end_date", "default_working_days", "narration", "department", "employee_type"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Horilla's form base pre-fills date fields with today; a payroll period must be chosen on purpose.
+        for f in ("start_date", "end_date"):
+            self.fields[f].initial = None
+        self.fields["narration"].required = False
+        self.fields["narration"].help_text = _("Shown on the bank payment file. Leave empty for 'MONTH SALARY - COMPANY'.")
+        self.fields["default_working_days"].help_text = _("Working days in the pay month. Can be changed per worker afterwards.")
 
     def clean(self):
         cd = super().clean()
@@ -20,39 +30,3 @@ class RunForm(forms.ModelForm):
         if cd.get("default_working_days") is not None and cd["default_working_days"] <= 0:
             self.add_error("default_working_days", _("Must be greater than zero."))
         return cd
-
-
-class ProfileForm(forms.ModelForm):
-    effective_from = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
-
-    class Meta:
-        model = WorkerPayProfile
-        fields = ["employee", "basic_salary", "effective_from", "note"]
-
-
-class FineForm(forms.ModelForm):
-    date_issued = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
-
-    class Meta:
-        model = Fine
-        fields = ["employee", "fine_type", "description", "amount", "date_issued"]
-
-
-class FineTypeForm(forms.ModelForm):
-    class Meta:
-        model = FineType
-        fields = ["name", "default_amount", "is_active"]
-
-
-class AgreementForm(forms.ModelForm):
-    first_due_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
-
-    class Meta:
-        model = LoanAgreement
-        fields = ["loan", "frequency", "instalment_amount", "first_due_date"]
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["loan"].queryset = LoanAccount.objects.filter(
-            agreement__isnull=True, type__in=["loan", "advanced_salary"]
-        )

@@ -1,10 +1,23 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "attendance_processing/_nav.html" %}
-<h2>{% trans "Attendance rule" %}</h2>
-<form method="post">{% csrf_token %}{{ form.as_p }}
-<h3>{% trans "Attendance windows" %}</h3>
-<p>{% trans "A punch counts as attendance only when its time falls inside one of these windows (e.g. 00:00-09:00 for the night shift and 14:00-20:00 for the afternoon shift). Leave all empty to accept any time. Punches in two different windows on one day are sent to review. A window cannot cross midnight: use two." %}</p>
-{{ formset.management_form }}{{ formset.non_form_errors }}
-<table>{% for f in formset %}<tr><td>{{ f.id }}{{ f.start.errors }}{{ f.start }}</td><td>{% trans "to" %}</td><td>{{ f.end.errors }}{{ f.end }}</td><td>{% if f.instance.pk %}{{ f.DELETE }} {% trans "remove" %}{% endif %}{{ f.non_field_errors }}</td></tr>{% endfor %}</table>
-<p>{% trans "Need a third window? Save, then edit the rule again for more empty rows." %}</p>
-<button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></form>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n widget_tweaks %}
+{% block page_title %}{% trans "Attendance rule" %}{% endblock %}
+{% block page_tabs %}{% include "attendance_processing/_nav.html" %}{% endblock %}
+{% block page_body %}
+<form method="post" style="max-width: 880px;">{% csrf_token %}
+  <div class="dm-form-card mb-3">{% include "demiller/_form_fields.html" with cols=6 %}</div>
+  <div class="dm-form-card mb-3">
+    <h5 class="fw-bold">{% trans "Attendance windows" %}</h5>
+    <p class="text-muted">{% trans "A punch counts only when its time falls inside one of these windows (e.g. 00:00–09:00 and 14:00–20:00). Leave all empty to accept any time. Punches in two different windows on one day are flagged. A window cannot cross midnight: use two." %}</p>
+    <div style="height:.5rem"></div>{{ formset.management_form }}{{ formset.non_form_errors }}
+    {% for f in formset %}
+    <div class="row align-items-end mb-2">{{ f.id }}
+      <div class="col-5 col-md-3">{{ f.start.errors }}{{ f.start }}</div>
+      <div class="col-2 col-md-1 text-center">{% trans "to" %}</div>
+      <div class="col-5 col-md-3">{{ f.end.errors }}{{ f.end }}</div>
+      <div class="col-12 col-md-3">{% if f.instance.pk %}<label>{{ f.DELETE }} {% trans "remove" %}</label>{% endif %}{{ f.non_field_errors }}</div>
+    </div>
+    {% endfor %}
+    <small class="text-muted">{% trans "Need a third window? Save, then edit the rule again for more empty rows." %}</small>
+  </div>
+  <div class="d-flex flex-row-reverse"><button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></div>
+</form>
+{% endblock %}

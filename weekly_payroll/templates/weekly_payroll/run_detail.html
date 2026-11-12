@@ -1,18 +1,51 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "weekly_payroll/_nav.html" %}
-<h2>{{ run.name }} — {{ run.get_status_display }}</h2>
-<p>{{ run.start_date }} → {{ run.end_date }} · {% trans "default working days" %}: {{ run.default_working_days }} · {{ run.employee_count }} {% trans "workers" %} · {% trans "total net" %}: <b>₦{{ run.total_net|floatformat:2 }}</b></p>
-{% if problems %}<ul style="color:#b00020">{% for p in problems %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
-<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0;">
-<a class="oh-btn oh-btn--light" href="{% url 'wp-run-download' run.pk %}">{% trans "Download Excel" %}</a>
-{% if can_edit %}<form method="post" action="{% url 'wp-run-recalculate' run.pk %}">{% csrf_token %}<button class="oh-btn oh-btn--light">{% trans "Recalculate" %}</button></form>{% endif %}
-{% if can_review %}<form method="post" action="{% url 'wp-run-review' run.pk %}">{% csrf_token %}<button class="oh-btn oh-btn--secondary">{% trans "Mark reviewed" %}</button></form>{% endif %}
-{% if can_approve %}<form method="post" action="{% url 'wp-run-approve' run.pk %}" onsubmit="return confirm('{% trans 'Approve and lock this payroll?' %}')">{% csrf_token %}<button class="oh-btn oh-btn--success">{% trans "Approve payroll" %}</button></form>{% endif %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{{ run.name }}{% endblock %}
+{% block page_actions %}
+<a class="oh-btn oh-btn--light" href="{% url 'wp-run-download' run.pk %}"><ion-icon name="download-outline" class="me-1"></ion-icon>{% trans "Download Excel" %}</a>
+{% if can_edit %}<form method="post" action="{% url 'wp-run-recalculate' run.pk %}" class="d-inline ms-2">{% csrf_token %}<button class="oh-btn oh-btn--light">{% trans "Recalculate" %}</button></form>{% endif %}
+{% if can_review %}<form method="post" action="{% url 'wp-run-review' run.pk %}" class="d-inline ms-2">{% csrf_token %}<button class="oh-btn oh-btn--secondary">{% trans "Mark reviewed" %}</button></form>{% endif %}
+{% if can_approve %}<form method="post" action="{% url 'wp-run-approve' run.pk %}" class="d-inline ms-2" onsubmit="return confirm('{% trans 'Approve and lock this payroll?' %}')">{% csrf_token %}<button class="oh-btn oh-btn--success">{% trans "Approve payroll" %}</button></form>{% endif %}
+{% endblock %}
+{% block page_tabs %}{% include "weekly_payroll/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="dm-form-card mb-3" style="padding:.9rem 1rem;">
+  <div class="row">
+    <div class="col-6 col-md-3"><small class="text-muted">{% trans "Status" %}</small><div class="fw-bold"><span class="oh-dot oh-dot--{% if run.status == 'draft' %}warning{% elif run.status == 'reviewed' %}info{% else %}success{% endif %}"></span> {{ run.get_status_display }}</div></div>
+    <div class="col-6 col-md-3"><small class="text-muted">{% trans "Period" %}</small><div class="fw-bold">{{ run.start_date|date:"d M Y" }} → {{ run.end_date|date:"d M Y" }}</div></div>
+    <div class="col-6 col-md-2"><small class="text-muted">{% trans "Default working days" %}</small><div class="fw-bold">{{ run.default_working_days }}</div></div>
+    <div class="col-6 col-md-2"><small class="text-muted">{% trans "Workers" %}</small><div class="fw-bold">{{ run.employee_count }}</div></div>
+    <div class="col-12 col-md-2"><small class="text-muted">{% trans "Total net" %}</small><div class="fw-bold h5 mb-0">₦{{ run.total_net|floatformat:"2g" }}</div></div>
+  </div>
 </div>
-<div style="overflow-x:auto"><table class="oh-table" style="font-size:.85rem;width:100%"><thead><tr><th>ID</th><th>{% trans "Name" %}</th><th>{% trans "Dept" %}</th>{% for w in week_headers %}<th>Wk{{ w }}</th>{% endfor %}<th>{% trans "Total days" %}</th><th>{% trans "Working days" %}</th><th>{% trans "Basic" %}</th><th>{% trans "Fines" %}</th><th>{% trans "IOU" %}</th><th>{% trans "Amount earned" %}</th></tr></thead>
-{% for l in lines %}<tr><td>{{ l.emp_code }}</td><td title="{{ l.breakdown.formula }}">{{ l.first_name }} {{ l.last_name }}{% for f in l.flags %}<br><small style="color:#b00020">⚠ {{ f }}</small>{% endfor %}</td><td>{{ l.department }}</td>
-{% for d in l.week_days %}<td>{{ d }}</td>{% endfor %}<td><b>{{ l.total_days }}</b></td>
-<td>{% if can_edit %}<form method="post" action="{% url 'wp-line-days' l.pk %}" style="display:flex;gap:.25rem">{% csrf_token %}<input type="number" min="1" name="working_days" value="{{ l.working_days }}" style="width:4.5rem"><button class="oh-btn oh-btn--light">✓</button></form>{% else %}{{ l.working_days }}{% endif %}</td>
-<td>{{ l.basic_salary|floatformat:2 }}</td><td title="{% for f in l.breakdown.fines %}{{ f.description }} {{ f.amount }}; {% endfor %}">{{ l.fines|floatformat:2 }}</td><td title="{% for i in l.breakdown.loans %}{{ i.loan }} #{{ i.no }} due {{ i.due }}: {{ i.amount }}; {% endfor %}">{{ l.iou|floatformat:2 }}</td><td><b>{{ l.amount_earned|floatformat:2 }}</b></td></tr>
-{% empty %}<tr><td colspan="14">{% trans "No workers. Workers need an approved pay profile." %}</td></tr>{% endfor %}</table></div>
-<p style="font-size:.8rem">{% trans "Amount earned = days attended ÷ working days × basic salary − fines − IOU, to the nearest kobo. Hover a name, fine or IOU for the working." %}</p>
-</section>{% endblock %}
+{% if problems %}<div class="oh-alert-container position-static mb-3"><div class="oh-alert oh-alert--warning">{% trans "Before this can be reviewed:" %}<ul class="mb-0">{% for p in problems|slice:":8" %}<li>{{ p }}</li>{% endfor %}</ul></div></div>{% endif %}
+<div class="dm-table-wrap">
+  <table class="dm-table">
+    <thead>
+      <tr>
+        <th class="dm-first">{% trans "Worker" %}</th><th>{% trans "Dept" %}</th>
+        {% for w in week_headers %}<th class="c">{% trans "Wk" %}{{ w }}</th>{% endfor %}
+        <th class="c">{% trans "Days" %}</th><th class="c">{% trans "Working days" %}</th>
+        <th class="r">{% trans "Basic" %}</th><th class="r">{% trans "Fines" %}</th><th class="r">{% trans "IOU" %}</th><th class="r">{% trans "Amount earned" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in lines %}
+      <tr>
+        <td class="dm-first" title="{{ l.breakdown.formula }}"><span class="dm-muted" style="margin-right:.35rem">{{ l.emp_code }}</span>{{ l.first_name }} {{ l.last_name }}{% for f in l.flags %}<span class="dm-flag">⚠ {{ f }}</span>{% endfor %}</td>
+        <td>{{ l.department }}</td>
+        {% for d in l.week_days %}<td class="c">{{ d }}</td>{% endfor %}
+        <td class="c" style="font-weight:700">{{ l.total_days }}</td>
+        <td class="c">{% if can_edit %}<form method="post" action="{% url 'wp-line-days' l.pk %}" style="display:flex;justify-content:center;gap:.25rem;margin:0">{% csrf_token %}<input type="number" min="1" name="working_days" value="{{ l.working_days }}" class="oh-input" style="width:4.5rem;padding:.2rem .4rem"><button class="oh-btn oh-btn--light oh-btn--small" title="{% trans 'Save' %}">✓</button></form>{% else %}{{ l.working_days }}{% endif %}</td>
+        <td class="r">{{ l.basic_salary|floatformat:"2g" }}</td>
+        <td class="r" title="{% for f in l.breakdown.fines %}{{ f.title }} {{ f.no }}/{{ f.of }}: {{ f.amount }}; {% endfor %}">{{ l.fines|floatformat:"2g" }}</td>
+        <td class="r" title="{% for i in l.breakdown.loans %}{{ i.title }} ({{ i.type }}) {{ i.no }}/{{ i.of }}: {{ i.amount }}; {% endfor %}">{{ l.iou|floatformat:"2g" }}</td>
+        <td class="r" style="font-weight:700">{{ l.amount_earned|floatformat:"2g" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="20">{% trans "No workers in this run." %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-muted small mt-3">{% trans "Amount earned = days ÷ working days × basic salary − fines − IOU, to the nearest kobo. Days are validated attendance. Basic salary is on the employee record (Work information). FINES are Horilla fines and IOU is Horilla loans and salary advances that are due (Payroll > Loans). Hover a name, fine or IOU for the working." %}</p>
+{% endblock %}

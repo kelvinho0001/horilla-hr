@@ -1,15 +1,18 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
-<h2 class="oh-main__titlebar-title">{% trans "Biometric Integration" %}</h2>
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin:1rem 0;">
-  <div class="oh-card"><b>{% trans "Last successful sync" %}</b><br>{{ last_ok|default:"—" }}</div>
-  <div class="oh-card"><b>{% trans "Last attempt" %}</b><br>{{ last_attempt|default:"—" }}</div>
-  <div class="oh-card"><b>{% trans "Transactions stored" %}</b><br>{{ transactions_total }}</div>
-  <div class="oh-card"><b>{% trans "Duplicates skipped" %}</b><br>{{ duplicates_total }}</div>
-  <div class="oh-card"><b>{% trans "Unmapped IDs" %}</b><br><a href="{% url 'bio-int-unmapped' %}">{{ unmapped_ids }}</a></div>
-  <div class="oh-card"><b>{% trans "Failed rows" %}</b><br>{{ failed_total }}</div>
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Biometric Import" %}{% endblock %}
+{% block page_actions %}<a class="oh-btn oh-btn--secondary" href="{% url 'bio-int-upload' %}"><ion-icon name="cloud-upload-outline" class="me-1"></ion-icon>{% trans "Upload attendance" %}</a>{% endblock %}
+{% block page_tabs %}{% include "biometric_integration/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="row mb-4">
+  <div class="col-6 col-md-2 mb-3"><div class="dm-stat"><small>{% trans "Last successful import" %}</small><div style="font-weight:600">{{ last_ok|date:"d M Y H:i"|default:"—" }}</div></div></div>
+  <div class="col-6 col-md-2 mb-3"><div class="dm-stat"><small>{% trans "Last attempt" %}</small><div style="font-weight:600">{{ last_attempt|date:"d M Y H:i"|default:"—" }}</div></div></div>
+  <div class="col-6 col-md-2 mb-3"><div class="dm-stat"><small>{% trans "Punches stored" %}</small><div class="dm-num">{{ transactions_total }}</div></div></div>
+  <div class="col-6 col-md-2 mb-3"><div class="dm-stat"><small>{% trans "Duplicates skipped" %}</small><div class="dm-num">{{ duplicates_total }}</div></div></div>
+  <div class="col-6 col-md-2 mb-3"><div class="dm-stat"><small>{% trans "IDs not linked to a worker" %}</small><div class="dm-num"><a href="{% url 'bio-int-unmapped' %}">{{ unmapped_ids }}</a></div></div></div>
+  <div class="col-6 col-md-2 mb-3"><div class="dm-stat"><small>{% trans "Rows with errors" %}</small><div class="dm-num">{{ failed_total }}</div></div></div>
 </div>
-<h3>{% trans "Providers" %}</h3>
-<ul>{% for p in providers %}<li>{{ p.name }} — {{ p.get_provider_type_display }}</li>{% empty %}<li>{% trans "No provider yet. One is created on the first upload." %}</li>{% endfor %}</ul>
-<h3>{% trans "Recent imports" %}</h3>
+<h5 class="fw-bold mb-2">{% trans "Sources" %}</h5>
+<p class="text-muted">{% for p in providers %}<span class="oh-badge oh-badge--secondary oh-badge--round me-1">{{ p.name }}</span>{% empty %}{% trans "None yet. One is created for each device the first time you upload its file." %}{% endfor %}</p>
+<h5 class="fw-bold mb-2 mt-4">{% trans "Recent imports" %}</h5>
 {% include "biometric_integration/_batch_table.html" with batches=recent %}
-</section>{% endblock %}
+{% endblock %}

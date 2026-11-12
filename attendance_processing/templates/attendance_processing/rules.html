@@ -1,8 +1,20 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "attendance_processing/_nav.html" %}
-<h2>{% trans "Attendance rules" %}</h2>
-{% if can_edit %}<a class="oh-btn oh-btn--secondary" href="{% url 'att-proc-rule-new' %}">{% trans "Add rule" %}</a>{% endif %}
-<p>{% trans "Most specific rule wins: employee, worker category, department, shift, then everyone. With no rule, any punch counts and Monday–Saturday are working days." %}</p>
-<table class="oh-table" style="width:100%"><thead><tr><th>{% trans "Name" %}</th><th>{% trans "Scope" %}</th><th>{% trans "Windows" %}</th><th>{% trans "Working weekdays (Mon=0)" %}</th><th>{% trans "Active" %}</th></tr></thead>
-{% for r in rules %}<tr><td>{% if can_edit %}<a href="{% url 'att-proc-rule-edit' r.pk %}">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}</td><td>{{ r.get_scope_display }} {{ r.department|default:"" }}{{ r.shift|default:"" }}{{ r.employee_type|default:"" }}{{ r.employee|default:"" }}</td><td>{% for w in r.windows.all %}{{ w.start|time:"H:i" }}–{{ w.end|time:"H:i" }}{% if not forloop.last %}, {% endif %}{% empty %}{% trans "any time" %}{% endfor %}</td><td>{{ r.working_weekdays }}</td><td>{{ r.is_active }}</td></tr>
-{% empty %}<tr><td colspan="5">{% trans "No rules." %}</td></tr>{% endfor %}</table>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Attendance rules" %}{% endblock %}
+{% block page_actions %}{% if can_edit %}<a class="oh-btn oh-btn--secondary" href="{% url 'att-proc-rule-new' %}">{% trans "Add rule" %}</a>{% endif %}{% endblock %}
+{% block page_tabs %}{% include "attendance_processing/_nav.html" %}{% endblock %}
+{% block page_body %}
+<p class="text-muted">{% trans "A rule lists the times of day when a punch counts as attendance (for example night shift 00:00–09:00 and afternoon shift 14:00–20:00). The most specific rule wins: worker, worker category, department, shift, then everyone. With no rule, any punch time counts." %}</p>
+<div class="oh-sticky-table"><div class="oh-sticky-table__table">
+  <div class="oh-sticky-table__thead"><div class="oh-sticky-table__tr">
+    <div class="oh-sticky-table__th">{% trans "Name" %}</div><div class="oh-sticky-table__th">{% trans "Applies to" %}</div><div class="oh-sticky-table__th">{% trans "Windows" %}</div><div class="oh-sticky-table__th">{% trans "Active" %}</div>
+  </div></div>
+  <div class="oh-sticky-table__tbody">
+    {% for r in rules %}<div class="oh-sticky-table__tr">
+      <div class="oh-sticky-table__sd">{% if can_edit %}<a href="{% url 'att-proc-rule-edit' r.pk %}">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}</div>
+      <div class="oh-sticky-table__td">{{ r.get_scope_display }} {{ r.department|default:"" }}{{ r.shift|default:"" }}{{ r.employee_type|default:"" }}{{ r.employee|default:"" }}</div>
+      <div class="oh-sticky-table__td">{% for w in r.windows.all %}{{ w.start|time:"H:i" }}–{{ w.end|time:"H:i" }}{% if not forloop.last %}, {% endif %}{% empty %}{% trans "any time" %}{% endfor %}</div>
+      <div class="oh-sticky-table__td">{% if r.is_active %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}</div>
+    </div>{% empty %}<div class="oh-sticky-table__tr"><div class="oh-sticky-table__td" style="grid-column:1/-1">{% trans "No rules: any punch time counts." %}</div></div>{% endfor %}
+  </div>
+</div></div>
+{% endblock %}

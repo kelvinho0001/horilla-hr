@@ -1,9 +1,11 @@
-{% load i18n %}
-<div class="oh-tabs__tablist" style="margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
-  <a class="oh-btn oh-btn--light" href="{% url "bio-int-dashboard" %}">{% trans "Dashboard" %}</a>
-  <a class="oh-btn oh-btn--light" href="{% url "bio-int-upload" %}">{% trans "Upload report" %}</a>
-  <a class="oh-btn oh-btn--light" href="{% url "bio-int-batches" %}">{% trans "Import history" %}</a>
-  <a class="oh-btn oh-btn--light" href="{% url "bio-int-unmapped" %}">{% trans "Unmapped IDs" %}</a>
-  <a class="oh-btn oh-btn--light" href="{% url "bio-int-mapping-list" %}">{% trans "Mappings" %}</a>
-  {% if perms.biometric_integration.add_externalemployeemapping %}<a class="oh-btn oh-btn--light" href="{% url "bio-int-worker-sheet" %}">{% trans "Worker sheet" %}</a>{% endif %}
-</div>
+{% load i18n %}{% with n=request.resolver_match.url_name %}
+<div class="oh-tabs">
+    <ul class="oh-tabs__tablist">
+      <li class="oh-tabs__tab {% if n == 'bio-int-dashboard' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bio-int-dashboard' %}" class="text-reset">{% trans "Overview" %}</a></li>
+      <li class="oh-tabs__tab {% if n == 'bio-int-upload' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bio-int-upload' %}" class="text-reset">{% trans "Upload attendance" %}</a></li>
+      <li class="oh-tabs__tab {% if n == 'bio-int-batches' or n == 'bio-int-batch-detail' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bio-int-batches' %}" class="text-reset">{% trans "Import history" %}</a></li>
+      <li class="oh-tabs__tab {% if n == 'bio-int-unmapped' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bio-int-unmapped' %}" class="text-reset">{% trans "Unmapped IDs" %}</a></li>
+      <li class="oh-tabs__tab {% if n == 'bio-int-mapping-list' or n == 'bio-int-mapping-create' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bio-int-mapping-list' %}" class="text-reset">{% trans "Mappings" %}</a></li>
+      {% if perms.biometric_integration.add_externalemployeemapping %}<li class="oh-tabs__tab {% if n == 'bio-int-worker-sheet' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'bio-int-worker-sheet' %}" class="text-reset">{% trans "Worker sheet" %}</a></li>{% endif %}
+    </ul>
+</div>{% endwith %}

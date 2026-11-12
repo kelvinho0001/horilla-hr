@@ -1,4 +1,0 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "weekly_payroll/_nav.html" %}
-<h2>{{ title }}</h2>{% if help %}<p>{{ help }}</p>{% endif %}
-<form method="post">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></form>
-</section>{% endblock %}

@@ -1,0 +1,10 @@
+{% comment %}Section links. Pass `tabs` as a list of (label, url, active) built by the app's context processor-free include; see each app's _nav.html.{% endcomment %}
+<div class="oh-wrapper" style="padding-bottom: 0.5rem;">
+  <div class="oh-tabs">
+    <ul class="oh-tabs__tablist">
+      {% for label, url, active in tabs %}
+        <li class="oh-tabs__tab {% if active %}oh-tabs__tab--active{% endif %}"><a href="{{ url }}" style="color: inherit; text-decoration: none;">{{ label }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>

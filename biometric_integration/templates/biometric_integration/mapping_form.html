@@ -1,4 +1,11 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
-<h2>{% trans "Map biometric ID to employee" %}</h2>
-<form method="post">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary" type="submit">{% trans "Save" %}</button></form>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Map a biometric ID to a worker" %}{% endblock %}
+{% block page_tabs %}{% include "biometric_integration/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="dm-form-card" style="max-width: 760px;">
+  <form method="post">{% csrf_token %}
+    {% include "demiller/_form_fields.html" with cols=6 %}
+    <div class="d-flex flex-row-reverse"><button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></div>
+  </form>
+</div>
+{% endblock %}

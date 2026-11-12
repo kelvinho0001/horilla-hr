@@ -163,8 +163,8 @@ Complete Horilla's first-run screens if shown (company, first user).
 1. In Horilla add the employees, departments and worker categories (employee types).
 2. Give each staff member their group **for the company**: Horilla only applies a group's permissions in a company where the
    user has been assigned that group. Do not put everyone in the approver group. See `docs/demiller/PRODUCTION_RUNBOOK.md`.
-3. Create an Attendance Rule for the real attendance window and working days (Attendance > Weekly Attendance Review > Rules).
-4. Add each worker's pay profile, bank and account; map biometric IDs (Attendance > Biometric Import).
+3. Create an Attendance Rule with the real attendance windows (Attendance > Biometric Attendance > Attendance rules).
+4. Put each worker's basic salary on the employee record (Employee > Work information), check their bank details (Payroll > Bank Export > Worker bank accounts) and map biometric IDs (Attendance > Biometric Import). Loans, salary advances and fines go in Payroll > Loans.
 
 ## 10. Backups (do this before real data goes in)
 
@@ -200,6 +200,7 @@ Apache alias for `/media/` to the media folder, which makes those files reachabl
 ## 12. Updating and rolling back
 
 Before any update: run the backup script by hand and note the current tag (`git describe --tags`).
+**Always run `python manage.py migrate` after pulling.** Some updates change the database; if you skip it, pages that use the new tables show a "page not found" screen (Horilla turns any page error into a 404; the real error is in `stderr.log`). The update that moved attendance and payroll onto Horilla's own records removes the old daily-attendance, approval, pay-profile, fine and loan-agreement tables (instalments already collected by approved runs are carried over), so back up first.
 
 ```bash
 cd ~/horilla && git fetch --tags && git checkout release-YYYY-MM-DD

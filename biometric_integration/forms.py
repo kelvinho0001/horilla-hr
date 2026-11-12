@@ -1,4 +1,6 @@
 from django import forms
+
+from base.forms import Form, ModelForm
 from django.utils.translation import gettext_lazy as _
 
 from employee.models import Employee
@@ -6,7 +8,7 @@ from employee.models import Employee
 from .models import PROVIDER_MANUAL_FILE, ExternalEmployeeMapping, ProviderConfig
 
 
-class UploadForm(forms.Form):
+class UploadForm(Form):
     provider = forms.ModelChoiceField(
         queryset=ProviderConfig.objects.none(), label=_("Provider"), required=False
     )
@@ -27,7 +29,7 @@ class UploadForm(forms.Form):
         return f
 
 
-class MappingForm(forms.Form):
+class MappingForm(Form):
     provider = forms.ModelChoiceField(queryset=ProviderConfig.objects.filter(is_active=True))
     employee = forms.ModelChoiceField(queryset=Employee.objects.filter(is_active=True))
     external_employee_id = forms.CharField(max_length=100, label=_("Biometric user ID"))
@@ -37,7 +39,7 @@ class MappingForm(forms.Form):
         return self.cleaned_data["external_employee_id"].strip()
 
 
-class WorkerSheetForm(forms.Form):
+class WorkerSheetForm(Form):
     user_file = forms.FileField(label=_("Device user list (user.dat)"))
     timenet_file = forms.FileField(
         required=False, label=_("Time.Net employee export (optional, .csv or .xlsx)"),

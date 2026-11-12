@@ -1,9 +1,0 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "weekly_payroll/_nav.html" %}
-<h2>{% trans "Fines" %}</h2>
-{% if can_add %}<a class="oh-btn oh-btn--secondary" href="{% url 'wp-fine-new' %}">{% trans "Issue fine" %}</a> {% for t in fine_types %}<a class="oh-btn oh-btn--light" href="{% url 'wp-fine-new' %}?type={{ t.pk }}">{{ t.name }} (₦{{ t.default_amount|floatformat:2 }})</a> {% endfor %}{% if perms.weekly_payroll.add_finetype %}<a href="{% url 'wp-fine-type-new' %}">{% trans "+ fine type" %}</a>{% endif %}{% endif %}
-<table class="oh-table" style="width:100%;margin-top:1rem"><thead><tr><th>{% trans "Employee" %}</th><th>{% trans "Description" %}</th><th>{% trans "Amount" %}</th><th>{% trans "Issued" %}</th><th>{% trans "Status" %}</th><th>{% trans "Deducted in" %}</th><th></th></tr></thead>
-{% for f in fines %}<tr><td>{{ f.employee }}</td><td>{{ f.description }}</td><td>₦{{ f.amount|floatformat:2 }}</td><td>{{ f.date_issued }}</td><td>{{ f.get_status_display }}{% if f.waive_reason %}<br><small>{{ f.waive_reason }}</small>{% endif %}</td><td>{{ f.applied_run|default:"—" }}</td>
-<td>{% if can_approve and f.status == "pending" %}<form method="post" action="{% url 'wp-fine-approve' f.pk %}" style="display:inline">{% csrf_token %}<button class="oh-btn oh-btn--success">{% trans "Approve" %}</button></form>{% endif %}
-{% if can_waive and f.status != "waived" and not f.applied_run_id %}<form method="post" action="{% url 'wp-fine-waive' f.pk %}" style="display:inline">{% csrf_token %}<input name="reason" required placeholder="{% trans 'Reason' %}"><button class="oh-btn oh-btn--light">{% trans "Waive" %}</button></form>{% endif %}</td></tr>
-{% empty %}<tr><td colspan="7">{% trans "No fines." %}</td></tr>{% endfor %}</table>
-</section>{% endblock %}

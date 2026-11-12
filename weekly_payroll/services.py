@@ -1,20 +1,20 @@
-"""Payroll calculation, loan ledger, fines and the run lifecycle."""
+"""Payroll calculation, the loan/fine ledger and the run lifecycle."""
 
-import calendar
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from attendance.models import Attendance
 from attendance_processing import calculators
-from attendance_processing.models import PRESENT, DailyAttendance
+from base.methods import get_nth_month_same_date
+from biometric_integration.models import ExternalEmployeeMapping
 from employee.models import Employee
+from payroll.models.models import LoanAccount
 
-from .models import (
-    Fine, LoanAgreement, LoanRepayment, PayrollLine, PayrollRun, WorkerPayProfile,
-)
+from .models import LoanDeduction, PayrollLine, PayrollRun
 from .money import D, kobo
 
 
@@ -25,8 +25,7 @@ class PayrollError(Exception):
 # ---------------------------------------------------------------- formula
 def amount_earned(total_days, working_days, basic, fines, iou):
     """
-    The sheet's formula, with the direction confirmed by Demiller:
-    days attended / working days x basic - fines - IOU, to the kobo.
+    The sheet's formula: days attended / working days x basic - fines - IOU, to the kobo.
     """
     if not working_days:
         raise PayrollError("Working days must be greater than zero.")
@@ -34,96 +33,62 @@ def amount_earned(total_days, working_days, basic, fines, iou):
     return earned - D(fines) - D(iou)
 
 
-# ---------------------------------------------------------------- loans
-def _add_months(d, n):
-    m = d.month - 1 + n
-    y, mo = d.year + m // 12, m % 12 + 1
-    return date(y, mo, min(d.day, calendar.monthrange(y, mo)[1]))
-
-
-def due_date(agreement, k):
-    """Due date of instalment k (1-based)."""
-    start = agreement.first_due_date
-    if agreement.frequency == LoanAgreement.WEEKLY:
-        return start + timedelta(weeks=k - 1)
-    # anchor on the original day so a 31st clamps per month without drifting
-    return _add_months(start, k - 1)
-
-
-def due_instalments(agreement, through):
+# ---------------------------------------------------------------- Horilla loans, advances and fines
+def installment_schedule(loan):
     """
-    Uncollected instalments due on or before ``through``, capped so the total
-    never exceeds the outstanding balance. Returns [(k, due_date, amount)].
+    [(k, due_date, amount)] for a Horilla LoanAccount, exactly as Horilla schedules it: equal monthly
+    instalments from the start date. The last one absorbs any kobo left over so the total is the loan amount.
     """
-    if agreement.status != LoanAgreement.APPROVED:
+    n = int(loan.installments or 0)
+    total = kobo(loan.loan_amount or 0)
+    if n <= 0 or total <= 0:
         return []
-    collected = set(
-        agreement.repayments.filter(installment_no__isnull=False).values_list("installment_no", flat=True)
-    )
-    remaining = agreement.outstanding()
-    out, k = [], 1
-    while remaining > 0:
-        dd = due_date(agreement, k)
-        if dd > through:
-            break
-        if k not in collected:
-            amt = min(agreement.instalment_amount, remaining)
-            out.append((k, dd, amt))
-            remaining -= amt
-        k += 1
-        if k > 1000:  # safety net against bad data
-            break
+    each = kobo(total / n)
+    out = []
+    for k in range(1, n + 1):
+        amount = each if k < n else total - each * (n - 1)
+        out.append((k, get_nth_month_same_date(loan.installment_start_date, k - 1), amount))
     return out
 
 
-def approve_agreement(agreement, user):
-    if agreement.status != LoanAgreement.PENDING:
-        raise PayrollError("Only a pending agreement can be approved.")
-    agreement.principal = kobo(agreement.loan.loan_amount)
-    if agreement.principal <= 0:
-        raise PayrollError("The loan amount must be greater than zero.")
-    agreement.status = LoanAgreement.APPROVED
-    agreement.approved_by, agreement.approved_at = user, timezone.now()
-    agreement.save()
-    return agreement
+def due_items(loan, through, collected):
+    """Uncollected instalments of this loan due on or before ``through``."""
+    if loan.settled:
+        return []
+    return [(k, due, amt) for k, due, amt in installment_schedule(loan) if due <= through and k not in collected]
 
 
-@transaction.atomic
-def record_adjustment(agreement, kind, amount, note, user):
-    """Early settlement or authorised adjustment; reduces the balance."""
-    amount = kobo(amount)
-    if kind not in (LoanRepayment.SETTLEMENT, LoanRepayment.ADJUSTMENT):
-        raise PayrollError("Invalid repayment kind.")
-    if not (note or "").strip():
-        raise PayrollError("A note is required.")
-    agreement = LoanAgreement.objects.select_for_update().get(pk=agreement.pk)
-    if agreement.status != LoanAgreement.APPROVED:
-        raise PayrollError("The agreement is not active.")
-    if amount <= 0 or amount > agreement.outstanding():
-        raise PayrollError("Amount must be positive and not exceed the outstanding balance.")
-    LoanRepayment.objects.create(agreement=agreement, kind=kind, amount=amount, note=note, user=user)
-    _close_if_cleared(agreement)
-    return agreement
+def is_fine(loan):
+    return loan.type == "fine"
 
 
-def _close_if_cleared(agreement):
-    if agreement.outstanding() <= 0:
-        agreement.status = LoanAgreement.SETTLED
-        agreement.save()
-        loan = agreement.loan
-        loan.settled = True
-        loan.save()
-
-
-# ---------------------------------------------------------------- pay profiles
-def profile_for(employee_id, on_date):
-    return (
-        WorkerPayProfile.objects.filter(
-            employee_id=employee_id, status=WorkerPayProfile.APPROVED, effective_from__lte=on_date
-        )
-        .order_by("-effective_from")
-        .first()
+# ---------------------------------------------------------------- who is in a run
+def payroll_employees(run):
+    """
+    Active workers with a verified biometric mapping or any validated attendance in the range,
+    optionally limited to a department and/or worker category.
+    """
+    mapped = ExternalEmployeeMapping.objects.filter(
+        is_active=True, status=ExternalEmployeeMapping.VERIFIED
+    ).values_list("employee_id", flat=True)
+    attended = Attendance.objects.filter(
+        attendance_date__range=(run.start_date, run.end_date), attendance_validated=True
+    ).values_list("employee_id_id", flat=True)
+    ids = set(mapped) | set(attended)
+    qs = Employee.objects.filter(pk__in=ids, is_active=True).select_related(
+        "employee_work_info", "employee_work_info__department_id"
     )
+    if run.department_id:
+        qs = qs.filter(employee_work_info__department_id=run.department_id)
+    if run.employee_type_id:
+        qs = qs.filter(employee_work_info__employee_type_id=run.employee_type_id)
+    return list(qs.order_by("badge_id", "employee_first_name"))
+
+
+def basic_salary_of(emp):
+    """The full-month basic salary on the employee record (Work information)."""
+    wi = getattr(emp, "employee_work_info", None)
+    return D(getattr(wi, "basic_salary", None) or 0)
 
 
 # ---------------------------------------------------------------- generation
@@ -135,77 +100,72 @@ def _editable(run):
 @transaction.atomic
 def generate(run):
     """
-    Build or rebuild the lines of a draft/reviewed run from APPROVED attendance.
-    HR's per-worker working-days overrides survive a rebuild. Nothing is written
-    to the loan ledger or the fines here.
+    Build or rebuild the lines of a draft/reviewed run. Days = validated Horilla attendance (one per day,
+    including attendance HR added by hand). Basic salary = the employee record. Fines, loans and salary
+    advances = Horilla LoanAccount instalments that are due. HR's per-worker working-days overrides survive a
+    rebuild. Nothing is written to the loan ledger here.
     """
     run = PayrollRun.objects.select_for_update().get(pk=run.pk)
     _editable(run)
     weeks = calculators.week_buckets(run.start_date, run.end_date)
+    emps = payroll_employees(run)
+    ids = [e.pk for e in emps]
 
-    profiles = {}
-    emps = Employee.objects.filter(is_active=True).select_related("employee_work_info", "employee_work_info__department_id")
-    if run.department_id:
-        emps = emps.filter(employee_work_info__department_id=run.department_id)
-    for e in emps:
-        p = profile_for(e.pk, run.end_date)
-        if p:
-            profiles[e.pk] = (e, p)
-    ids = list(profiles)
-
-    present, unapproved = defaultdict(set), defaultdict(int)
-    for d in DailyAttendance.objects.filter(
-        employee_id__in=ids, date__range=(run.start_date, run.end_date), status=PRESENT
-    ):
-        if d.approval_id:
-            present[d.employee_id].add(d.date)
+    present, waiting = defaultdict(set), defaultdict(int)
+    for emp_id, day, validated in Attendance.objects.filter(
+        employee_id__in=ids, attendance_date__range=(run.start_date, run.end_date)
+    ).values_list("employee_id_id", "attendance_date", "attendance_validated"):
+        if validated:
+            present[emp_id].add(day)
         else:
-            unapproved[d.employee_id] += 1
+            waiting[emp_id] += 1
 
-    fines = defaultdict(list)
-    for f in Fine.objects.filter(
-        employee_id__in=ids, status=Fine.APPROVED, applied_run__isnull=True,
-        date_issued__lte=run.end_date,
-    ):
-        fines[f.employee_id].append(f)
-
-    agreements = defaultdict(list)
-    for a in LoanAgreement.objects.filter(loan__employee_id__in=ids, status=LoanAgreement.APPROVED).select_related("loan"):
-        agreements[a.loan.employee_id_id].append(a)
+    collected = defaultdict(set)
+    for loan_id, no in LoanDeduction.objects.filter(loan__employee_id__in=ids).values_list("loan_id", "installment_no"):
+        collected[loan_id].add(no)
+    loans = defaultdict(list)
+    for loan in LoanAccount.objects.filter(employee_id__in=ids, settled=False):
+        loans[loan.employee_id_id].append(loan)
 
     existing = {l.employee_id: l for l in run.lines.all()}
     for emp_id in set(existing) - set(ids):
         existing[emp_id].delete()
 
     total_net = Decimal("0")
-    for emp_id in ids:
-        e, p = profiles[emp_id]
-        days = present.get(emp_id, set())
+    for e in emps:
+        days = present.get(e.pk, set())
         week_counts = [sum(1 for d in days if a <= d <= b) for a, b in weeks]
-        line = existing.get(emp_id) or PayrollLine(run=run, employee=e)
-        override = line.working_days_override
-        working = override if override is not None else run.default_working_days
+        line = existing.get(e.pk) or PayrollLine(run=run, employee=e)
+        working = line.working_days_override if line.working_days_override is not None else run.default_working_days
+        basic = basic_salary_of(e)
 
-        fine_items = [{"id": f.pk, "description": f.description, "amount": str(f.amount)} for f in fines.get(emp_id, [])]
-        fine_total = sum((f.amount for f in fines.get(emp_id, [])), Decimal("0"))
-        loan_items, iou = [], Decimal("0")
-        for a in agreements.get(emp_id, []):
-            for k, dd, amt in due_instalments(a, run.end_date):
-                loan_items.append({"agreement": a.pk, "loan": a.loan.title, "no": k, "due": dd.isoformat(), "amount": str(amt)})
-                iou += amt
+        fine_items, loan_items = [], []
+        fine_total = iou = Decimal("0")
+        for loan in loans.get(e.pk, []):
+            for k, due, amt in due_items(loan, run.end_date, collected[loan.pk]):
+                item = {"loan": loan.pk, "title": loan.title, "type": loan.get_type_display(), "no": k, "of": loan.installments,
+                        "due": due.isoformat(), "amount": str(amt)}
+                if is_fine(loan):
+                    fine_items.append(item)
+                    fine_total += amt
+                else:
+                    loan_items.append(item)
+                    iou += amt
 
         flags = []
-        if unapproved.get(emp_id):
-            flags.append(f"{unapproved[emp_id]} present day(s) not yet approved - not counted")
+        if waiting.get(e.pk):
+            flags.append(f"{waiting[e.pk]} attendance day(s) waiting for validation - not counted")
         if not days:
-            flags.append("No approved attendance in range")
+            flags.append("No validated attendance in range")
+        if not basic:
+            flags.append("No basic salary on the employee record")
         if working and sum(week_counts) > working:
             flags.append("Days attended exceed working days")
         if not working:
             flags.append("Working days not set")
             earned = Decimal("0")
         else:
-            earned = amount_earned(sum(week_counts), working, p.basic_salary, fine_total, iou)
+            earned = amount_earned(sum(week_counts), working, basic, fine_total, iou)
             if earned < 0:
                 flags.append("Net pay is negative")
 
@@ -215,11 +175,11 @@ def generate(run):
         line.department = str(wi.department_id) if wi and wi.department_id_id else ""
         line.week_days, line.total_days = week_counts, sum(week_counts)
         line.working_days = working
-        line.basic_salary, line.fines, line.iou, line.amount_earned = p.basic_salary, fine_total, iou, earned
+        line.basic_salary, line.fines, line.iou, line.amount_earned = basic, fine_total, iou, earned
         line.flags = flags
         line.breakdown = {
-            "formula": f"{sum(week_counts)} / {working} x {p.basic_salary} - {fine_total} - {iou}",
-            "fines": fine_items, "loans": loan_items, "profile_id": p.pk,
+            "formula": f"{sum(week_counts)} / {working} x {basic} - {fine_total} - {iou}",
+            "fines": fine_items, "loans": loan_items,
         }
         line.save()
         total_net += earned
@@ -265,10 +225,13 @@ def blockers(run):
     out = []
     lines = list(run.lines.all())
     if not lines:
-        out.append("The run has no workers. Generate it first.")
+        out.append("The run has no workers. Check the dates, department and worker category, and that the workers are mapped or have validated attendance.")
     for l in lines:
+        label = f"{l.emp_code} {l.first_name}".strip()
         if not l.working_days:
-            out.append(f"{l.emp_code} {l.first_name}: working days not set")
+            out.append(f"{label}: working days not set")
+        if not l.basic_salary:
+            out.append(f"{label}: no basic salary on the employee record (Employee > Work information)")
     return out
 
 
@@ -289,8 +252,8 @@ def mark_reviewed(run, user):
 @transaction.atomic
 def approve(run, user):
     """
-    Approve: re-checks that every loan instalment and fine is still unused, then
-    writes the ledger and locks the run. Anything stale means recalculate.
+    Approve: re-checks that every instalment is still unused, writes the ledger and locks the run.
+    Anything stale means recalculate.
     """
     run = PayrollRun.objects.select_for_update().get(pk=run.pk)
     if run.status != PayrollRun.REVIEWED:
@@ -314,52 +277,27 @@ def approve(run, user):
             "for an overlapping period."
         )
 
+    taken = []
     try:
         with transaction.atomic():
-            for line in run.lines.select_related("employee"):
-                for item in line.breakdown.get("loans", []):
-                    agreement = LoanAgreement.objects.select_for_update().get(pk=item["agreement"])
-                    amount = D(item["amount"])
-                    if agreement.status != LoanAgreement.APPROVED or amount > agreement.outstanding():
-                        raise PayrollError("A loan balance changed since this run was calculated. Recalculate.")
-                    LoanRepayment.objects.create(
-                        agreement=agreement, kind=LoanRepayment.INSTALMENT, amount=amount,
-                        installment_no=item["no"], due_date=date.fromisoformat(item["due"]),
-                        run=run, user=user, note=f"Payroll {run.name}",
+            for line in run.lines.all():
+                for item in line.breakdown.get("loans", []) + line.breakdown.get("fines", []):
+                    LoanDeduction.objects.create(
+                        loan_id=item["loan"], installment_no=item["no"], due_date=date.fromisoformat(item["due"]),
+                        amount=D(item["amount"]), run=run,
                     )
-                    _close_if_cleared(agreement)
-                for item in line.breakdown.get("fines", []):
-                    n = Fine.objects.filter(
-                        pk=item["id"], status=Fine.APPROVED, applied_run__isnull=True
-                    ).update(applied_run=run)
-                    if n != 1:
-                        raise PayrollError("A fine changed since this run was calculated. Recalculate.")
+                    taken.append(item["loan"])
     except IntegrityError as exc:
         raise PayrollError(
-            "A loan instalment in this run was already collected by another run. Recalculate."
+            "A loan, advance or fine instalment in this run was already taken by another approved run. Recalculate."
         ) from exc
+
+    # A loan whose every instalment has now been taken is marked settled on Horilla's loan too.
+    for loan_id in set(taken):
+        loan = LoanAccount.objects.get(pk=loan_id)
+        if loan.payroll_deductions.count() >= int(loan.installments or 0):
+            LoanAccount.objects.filter(pk=loan_id).update(settled=True, settled_date=timezone.now())
 
     run.status, run.approved_by, run.approved_at = PayrollRun.APPROVED, user, timezone.now()
     run.save()
     return run
-
-
-# ---------------------------------------------------------------- fines
-def approve_fine(fine, user):
-    if fine.status != Fine.PENDING:
-        raise PayrollError("Only a pending fine can be approved.")
-    fine.status, fine.approved_by, fine.approved_at = Fine.APPROVED, user, timezone.now()
-    fine.save()
-    return fine
-
-
-def waive_fine(fine, user, reason):
-    if not (reason or "").strip():
-        raise PayrollError("A reason is required to waive a fine.")
-    if fine.applied_run_id:
-        raise PayrollError("This fine has already been deducted in an approved payroll.")
-    fine.status, fine.waived_by, fine.waived_at, fine.waive_reason = (
-        Fine.WAIVED, user, timezone.now(), reason.strip(),
-    )
-    fine.save()
-    return fine

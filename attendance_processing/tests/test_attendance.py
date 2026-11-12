@@ -1,32 +1,24 @@
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from django.contrib.auth.models import Group, Permission
+from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
+from attendance.models import Attendance
 from attendance_processing import calculators, permissions, services
-from attendance_processing.models import (
-    AttendanceApproval, AttendanceCorrection, AttendanceRule, DailyAttendance,
-)
-from base.models import CompanyGroupAssignment, Department, Holidays
-from biometric_integration.models import (
-    ExternalEmployeeMapping, ImportBatch, ProviderConfig, RawTransaction,
-)
+from attendance_processing.models import AttendanceRule
+from base.models import CompanyGroupAssignment, Department
+from biometric_integration.models import ExternalEmployeeMapping, ImportBatch, ProviderConfig, RawTransaction
 from horilla.testkit import make_company, make_employee
-from horilla.testkit.factories import make_leave_request, make_leave_type
 
+LAGOS = ZoneInfo("Africa/Lagos")
+MON = date(2024, 9, 2)  # a Monday in the past
 _N = [0]
 
 
 def _bump():
     _N[0] += 1
-
-
-LAGOS = ZoneInfo("Africa/Lagos")
-# Monday 2024-09-02 .. Sunday 2024-09-08 (all in the past)
-MON = date(2024, 9, 2)
 
 
 def at(day, hh=16, mm=0):
@@ -42,352 +34,236 @@ class Base(TestCase):
 
     def emp(self, joined=date(2024, 1, 1), department=None, mapped=True):
         _bump()
-        e = make_employee(
-            company=self.company, email=f"e{_N[0]}@x.test", first_name=f"E{_N[0]}",
-            date_joining=joined, department=department,
-        )
+        e = make_employee(company=self.company, email=f"e{_N[0]}@x.test", first_name=f"E{_N[0]}",
+                          date_joining=joined, department=department)
         if mapped:
-            ExternalEmployeeMapping.objects.create(
-                provider=self.provider, employee=e, external_employee_id=f"{_N[0]}"
-            )
+            ExternalEmployeeMapping.objects.create(provider=self.provider, employee=e, external_employee_id=f"{_N[0]}")
         return e
 
-    def punch(self, e, ts, uniq=None):
+    def punch(self, e, ts):
         _bump()
         return RawTransaction.objects.create(
-            provider=self.provider, batch=self.batch, dedup_key=f"k{_N[0]}",
-            external_employee_id="x", employee=e, attendance_timestamp=ts,
-            source_timezone="Africa/Lagos",
-        )
+            provider=self.provider, batch=self.batch, dedup_key=f"k{_N[0]}", external_employee_id="x", employee=e,
+            attendance_timestamp=ts, source_timezone="Africa/Lagos")
 
-    def status(self, e, d):
-        return DailyAttendance.objects.get(employee=e, date=d).status
+    def att(self, e, d):
+        return Attendance.objects.filter(employee_id=e, attendance_date=d).first()
 
-    def run_week(self, e, start=MON, end=MON + timedelta(days=6)):
-        return services.process_range(start, end, [e])
+    def window_rule(self, **kw):
+        r = AttendanceRule.objects.create(name=f"r{_N[0]}", scope=kw.pop("scope", "global"), **kw)
+        return r
 
 
 class CalculatorTests(TestCase):
     def test_week_buckets_any_length(self):
         b = calculators.week_buckets(date(2024, 9, 1), date(2024, 9, 17))
         self.assertEqual([(a.day, z.day) for a, z in b], [(1, 7), (8, 14), (15, 17)])
-        self.assertEqual(calculators.week_buckets(date(2024, 9, 3), date(2024, 9, 3)), [(date(2024, 9, 3),) * 2])
 
-    def test_multiple_punches_is_one_present(self):
-        s, f = calculators.classify([time(15, 55), time(16, 5), time(16, 6)],
-                                    window=None, working_weekday=True, is_holiday=False, on_leave=False)
-        self.assertEqual(s, "present")
+    def test_any_number_of_valid_punches_is_one_ok_day(self):
+        s, f = calculators.classify([time(15, 55), time(16, 5), time(16, 6)])
+        self.assertEqual(s, "ok")
         self.assertIn("multiple_punches", f)
 
-    def test_outside_window_needs_review_not_discarded(self):
-        s, f = calculators.classify([time(7, 0)], window=(time(15, 0), time(17, 0)),
-                                    working_weekday=True, is_holiday=False, on_leave=False)
-        self.assertEqual((s, f), ("review", ["out_of_window"]))
+    def test_outside_every_window_needs_attention(self):
+        self.assertEqual(calculators.classify([time(11)], [(time(0), time(9)), (time(14), time(20))]), ("attention", ["out_of_window"]))
+
+    def test_two_shifts_in_one_day_needs_attention(self):
+        w = [(time(0), time(9)), (time(14), time(20))]
+        s, f = calculators.classify([time(7, 42), time(14, 35)], w)
+        self.assertEqual(s, "attention")
+        self.assertIn("two_shifts_same_day", f)
+
+    def test_window_forms_accepted(self):
+        self.assertEqual(calculators.classify([time(16)], (time(14), time(20)))[0], "ok")
+        self.assertEqual(calculators.classify([time(16)], None)[0], "ok")
+        self.assertEqual(calculators.classify([])[0], None)
 
 
 class ProcessingTests(Base):
-    def test_valid_punch_creates_present(self):
+    def run_day(self, e, d=MON, e2=None):
+        return services.process_range(d, d, [e])
+
+    def test_valid_punch_becomes_an_unvalidated_horilla_attendance(self):
+        e = self.emp()
+        self.punch(e, at(MON, 16, 26))
+        stats = self.run_day(e)
+        a = self.att(e, MON)
+        self.assertEqual(stats["created"], 1)
+        self.assertEqual((a.attendance_clock_in, a.attendance_clock_in_date, a.attendance_validated), (time(16, 26), MON, False))
+        self.assertIsNone(a.attendance_clock_out)
+
+    def test_two_punches_one_day_is_one_record_with_checkout_when_hours_apart(self):
+        e = self.emp()
+        self.punch(e, at(MON, 8, 5))
+        self.punch(e, at(MON, 18, 10))
+        self.run_day(e)
+        self.assertEqual(Attendance.objects.filter(employee_id=e).count(), 1)
+        self.assertEqual(self.att(e, MON).attendance_clock_out, time(18, 10))
+
+    def test_double_punch_minutes_apart_has_no_checkout(self):
+        e = self.emp()
+        self.punch(e, at(MON, 16, 26))
+        self.punch(e, at(MON, 16, 27))
+        self.run_day(e)
+        self.assertIsNone(self.att(e, MON).attendance_clock_out)
+
+    def test_rerun_is_idempotent_and_never_touches_existing_records(self):
         e = self.emp()
         self.punch(e, at(MON))
-        self.run_week(e)
-        self.assertEqual(self.status(e, MON), "present")
+        self.run_day(e)
+        Attendance.objects.filter(employee_id=e).update(attendance_validated=True)
+        stats = self.run_day(e)
+        self.assertEqual((stats["created"], stats["already_there"]), (0, 1))
+        self.assertTrue(self.att(e, MON).attendance_validated)
+        self.assertEqual(Attendance.objects.filter(employee_id=e).count(), 1)
 
-    def test_two_punches_one_day_is_one_row(self):
-        e = self.emp()
-        self.punch(e, at(MON, 15, 58))
-        self.punch(e, at(MON, 16, 3))
-        self.run_week(e)
-        self.assertEqual(DailyAttendance.objects.filter(employee=e, date=MON).count(), 1)
-        self.assertEqual(DailyAttendance.objects.get(employee=e, date=MON).raw_count, 2)
-
-    def test_missing_rest_day_and_idempotent(self):
+    def test_day_with_hr_added_attendance_is_left_alone(self):
         e = self.emp()
         self.punch(e, at(MON))
-        first = self.run_week(e)
-        self.run_week(e)
-        self.assertEqual(self.status(e, MON + timedelta(days=1)), "missing")
-        self.assertEqual(self.status(e, MON + timedelta(days=6)), "rest")  # Sunday, fallback
-        self.assertEqual(DailyAttendance.objects.filter(employee=e).count(), 7)
-        self.assertEqual(first["created"], 7)
+        Attendance.objects.create(employee_id=e, attendance_date=MON, attendance_clock_in=time(9), attendance_clock_in_date=MON, attendance_validated=True)
+        stats = self.run_day(e)
+        self.assertEqual(stats["created"], 0)
+        self.assertEqual(self.att(e, MON).attendance_clock_in, time(9))
 
-    def test_approved_leave_not_absent(self):
+    def test_day_is_the_lagos_date_not_utc(self):
         e = self.emp()
-        make_leave_request(employee=e, leave_type=make_leave_type(), start_date=MON + timedelta(1), end_date=MON + timedelta(1))
-        self.run_week(e)
-        self.assertEqual(self.status(e, MON + timedelta(1)), "leave")
+        self.punch(e, datetime(2024, 9, 2, 23, 30, tzinfo=ZoneInfo("UTC")))  # 00:30 Tuesday in Lagos
+        services.process_range(MON, MON + timedelta(1), [e])
+        self.assertIsNone(self.att(e, MON))
+        self.assertIsNotNone(self.att(e, MON + timedelta(1)))
 
-    def test_pending_leave_does_not_count(self):
+    def test_future_days_never_processed(self):
         e = self.emp()
-        make_leave_request(employee=e, leave_type=make_leave_type(), start_date=MON + timedelta(1),
-                           end_date=MON + timedelta(1), status="requested")
-        self.run_week(e)
-        self.assertEqual(self.status(e, MON + timedelta(1)), "missing")
-
-    def test_public_holiday(self):
-        e = self.emp()
-        Holidays.objects.create(name="Fest", start_date=MON + timedelta(2), end_date=MON + timedelta(2))
-        self.run_week(e)
-        self.assertEqual(self.status(e, MON + timedelta(2)), "holiday")
-
-    def test_joiners_and_leavers(self):
-        e = self.emp(joined=MON + timedelta(3))
-        self.run_week(e)
-        days = set(DailyAttendance.objects.filter(employee=e).values_list("date", flat=True))
-        self.assertNotIn(MON, days)
-        self.assertIn(MON + timedelta(3), days)
-
-    def test_future_dates_never_marked(self):
-        e = self.emp()
+        self.punch(e, at(MON))
         stats = services.process_range(services.today() + timedelta(1), services.today() + timedelta(5), [e])
-        self.assertEqual(stats["days"], 0)
-        self.assertFalse(DailyAttendance.objects.filter(employee=e).exists())
+        self.assertEqual(stats["created"], 0)
 
-    def test_day_uses_local_date_not_utc(self):
-        e = self.emp()
-        # 23:30 UTC on Monday is 00:30 Tuesday in Lagos.
-        self.punch(e, datetime(2024, 9, 2, 23, 30, tzinfo=ZoneInfo("UTC")))
-        self.run_week(e)
-        self.assertEqual(self.status(e, MON + timedelta(1)), "present")
-        self.assertEqual(self.status(e, MON), "missing")
+    def test_before_joining_and_after_contract_end_ignored(self):
+        e = self.emp(joined=MON + timedelta(3))
+        self.punch(e, at(MON))
+        self.punch(e, at(MON + timedelta(3)))
+        services.process_range(MON, MON + timedelta(6), [e])
+        self.assertIsNone(self.att(e, MON))
+        self.assertIsNotNone(self.att(e, MON + timedelta(3)))
 
-    def test_unmapped_employees_not_processed(self):
+    def test_only_mapped_workers_are_processed(self):
         e = self.emp(mapped=False)
         self.assertNotIn(e, list(services.employees_for_attendance()))
 
-    def test_rule_specificity_and_window(self):
+    def test_two_shift_windows_and_attention_cases(self):
+        r = self.window_rule()
+        r.windows.create(start=time(0), end=time(9))
+        r.windows.create(start=time(14), end=time(20))
+        night, day_w, between, both = self.emp(), self.emp(), self.emp(), self.emp()
+        self.punch(night, at(MON, 4, 52))
+        self.punch(day_w, at(MON, 16, 26))
+        self.punch(between, at(MON, 11))
+        self.punch(both, at(MON, 7, 42))
+        self.punch(both, at(MON, 14, 35))
+        stats = services.process_range(MON, MON, [night, day_w, between, both])
+        self.assertEqual(stats["created"], 2)
+        self.assertIsNotNone(self.att(night, MON))
+        self.assertIsNotNone(self.att(day_w, MON))
+        self.assertIsNone(self.att(between, MON))
+        self.assertIsNone(self.att(both, MON))
+        self.assertEqual({e.pk for e, _d, _i in stats["attention"]}, {between.pk, both.pk})
+
+    def test_accept_day_adds_a_flagged_day_once(self):
+        r = self.window_rule()
+        r.windows.create(start=time(14), end=time(20))
+        e = self.emp()
+        self.punch(e, at(MON, 11))
+        services.process_range(MON, MON, [e])
+        self.assertIsNone(self.att(e, MON))
+        services.accept_day(e, MON)
+        self.assertFalse(self.att(e, MON).attendance_validated)
+        with self.assertRaises(services.AttendanceError):
+            services.accept_day(e, MON)
+        with self.assertRaises(services.AttendanceError):
+            services.accept_day(e, MON + timedelta(1))
+
+    def test_rule_specificity_department_beats_global(self):
         d = Department.objects.create(department="Packing")
-        a, b = self.emp(department=d), self.emp()
-        g = AttendanceRule.objects.create(name="all", scope="global", working_weekdays="0,1,2,3,4,5,6")
+        g = self.window_rule()
         g.windows.create(start=time(15), end=time(17))
-        k = AttendanceRule.objects.create(name="pack", scope="department", department=d, working_weekdays="0,1,2,3,4,5")
+        k = self.window_rule(scope="department", department=d)
         k.windows.create(start=time(9), end=time(11))
+        a, b = self.emp(department=d), self.emp()
         for e in (a, b):
             self.punch(e, at(MON, 10))
-        services.process_range(MON, MON + timedelta(6), [a, b])
-        self.assertEqual(self.status(a, MON), "present")   # dept window 9-11
-        self.assertEqual(self.status(b, MON), "review")    # global window 15-17
-        self.assertEqual(self.status(a, MON + timedelta(6)), "rest")
-        self.assertEqual(self.status(b, MON + timedelta(6)), "missing")  # global works Sundays
+        services.process_range(MON, MON, [a, b])
+        self.assertIsNotNone(self.att(a, MON))   # department window 9-11
+        self.assertIsNone(self.att(b, MON))      # global window 15-17
 
-    def test_concurrent_creation_race_does_not_duplicate(self):
-        e = self.emp()
-        DailyAttendance.objects.create(employee=e, date=MON, status="missing")
-        self.run_week(e)
-        self.assertEqual(DailyAttendance.objects.filter(employee=e, date=MON).count(), 1)
-
-
-class CorrectionApprovalTests(Base):
-    def setUp(self):
-        self.user = make_employee(company=self.company, email="hr@x.test").employee_user_id
-        self.e = self.emp()
-        self.run_week(self.e)
-
-    def test_correction_requires_reason_and_is_audited(self):
-        d = MON + timedelta(1)
+    def test_range_limit(self):
         with self.assertRaises(services.AttendanceError):
-            services.correct(self.e, d, "present", "  ", self.user)
-        services.correct(self.e, d, "present", "Phone punch lost", self.user)
-        c = AttendanceCorrection.objects.get()
-        self.assertEqual((c.old_status, c.new_status, c.reason), ("missing", "present", "Phone punch lost"))
-
-    def test_correction_survives_reprocessing(self):
-        d = MON + timedelta(1)
-        services.correct(self.e, d, "present", "ok", self.user)
-        self.run_week(self.e)
-        self.assertEqual(self.status(self.e, d), "present")
-
-    def test_cannot_mark_future(self):
-        with self.assertRaises(services.AttendanceError):
-            services.correct(self.e, services.today() + timedelta(1), "present", "x", self.user)
-
-    def resolve_all(self):
-        services.bulk_mark_missing_absent([self.e], MON, MON + timedelta(6), "No show", self.user)
-
-    def test_approval_blocked_while_unresolved(self):
-        with self.assertRaises(services.ApprovalBlocked) as cm:
-            services.approve(MON, MON + timedelta(6), self.user)
-        self.assertEqual(len(cm.exception.rows), 6)
-
-    def test_approve_locks_and_reopen_unlocks_with_audit(self):
-        self.resolve_all()
-        a = services.approve(MON, MON + timedelta(6), self.user)
-        self.assertEqual(a.day_count, 7)
-        d = MON + timedelta(1)
-        with self.assertRaises(services.AttendanceError):
-            services.correct(self.e, d, "present", "late fix", self.user)
-        # re-processing leaves locked rows alone
-        self.punch(self.e, at(d))
-        self.run_week(self.e)
-        self.assertEqual(self.status(self.e, d), "absent")
-        with self.assertRaises(services.AttendanceError):
-            services.reopen(a, self.user, "")
-        services.reopen(a, self.user, "Wrong week")
-        a.refresh_from_db()
-        self.assertEqual((a.status, a.reopen_reason, a.reopened_by), ("reopened", "Wrong week", self.user))
-        services.correct(self.e, d, "present", "late fix", self.user)
-        with self.assertRaises(services.AttendanceError):  # cannot reopen twice
-            services.reopen(a, self.user, "again")
-
-    def test_approve_empty_range_rejected(self):
-        with self.assertRaises(services.AttendanceError):
-            services.approve(date(2020, 1, 1), date(2020, 1, 7), self.user)
-
-    def test_department_scoped_approval(self):
-        d = Department.objects.create(department="Sel")
-        other = self.emp(department=d)
-        self.run_week(other)
-        services.bulk_mark_missing_absent([other], MON, MON + timedelta(6), "x", self.user)
-        services.approve(MON, MON + timedelta(6), self.user, department=d)
-        self.assertTrue(DailyAttendance.objects.filter(employee=other, approval__isnull=False).exists())
-        self.assertFalse(DailyAttendance.objects.filter(employee=self.e, approval__isnull=False).exists())
+            services.process_range(MON, MON + timedelta(200), [])
 
 
 class RoleAndViewTests(Base):
     def setUp(self):
         permissions.sync_groups()
         self.e = self.emp()
-        self.run_week(self.e)
+        self.punch(self.e, at(MON, 16))
 
     def login(self, group):
-        emp = make_employee(company=self.company, email=f"{group.replace('/', '')}@x.test")
-        user = emp.employee_user_id
-        user.is_new_employee = False  # else Horilla forces a password change
+        user = make_employee(company=self.company, email=f"{group.replace('/', '')}{_N[0]}@x.test").employee_user_id
+        _bump()
+        user.is_new_employee = False
         user.save()
-        # Horilla scopes group permissions per company (COMPANY_SCOPED_PERMISSIONS).
-        CompanyGroupAssignment.objects.create(
-            user=user, company=self.company, group=Group.objects.get(name=group)
-        )
+        CompanyGroupAssignment.objects.create(user=user, company=self.company, group=Group.objects.get(name=group))
         self.client.force_login(user)
         return user
 
-    def post_approve(self):
-        return self.client.post(reverse("att-proc-approve"), {
-            "start": str(MON), "end": str(MON + timedelta(6)),
-        })
-
-    def test_groups_seeded_with_split_duties(self):
-        officer = set(Group.objects.get(name="HR Officer").permissions.values_list("codename", flat=True))
-        approver = set(Group.objects.get(name="HR/Payroll Approver").permissions.values_list("codename", flat=True))
-        self.assertIn("correct_attendance", officer)
-        self.assertNotIn("approve_attendance", officer)
-        self.assertNotIn("reopen_attendance", officer)
-        self.assertTrue({"approve_attendance", "reopen_attendance"} <= approver)
-        accountant = set(Group.objects.get(name="Accountant").permissions.values_list("codename", flat=True))
-        self.assertNotIn("correct_attendance", accountant)
-
-    def test_officer_cannot_approve_approver_can(self):
-        services.bulk_mark_missing_absent([self.e], MON, MON + timedelta(6), "x", make_employee(company=self.company, email="z@x.test").employee_user_id)
+    def test_officer_can_process_accountant_cannot(self):
+        self.login("Accountant")
+        self.client.post(reverse("att-proc-process"), {"start": str(MON), "end": str(MON)})
+        self.assertIsNone(self.att(self.e, MON))
         self.login("HR Officer")
-        self.post_approve()
-        self.assertEqual(AttendanceApproval.objects.count(), 0)
-        self.login("HR/Payroll Approver")
-        self.post_approve()
-        self.assertEqual(AttendanceApproval.objects.count(), 1)
+        self.client.post(reverse("att-proc-process"), {"start": str(MON), "end": str(MON)})
+        self.assertIsNotNone(self.att(self.e, MON))
 
-    def test_officer_cannot_reopen(self):
-        u = self.login("HR/Payroll Approver")
-        services.bulk_mark_missing_absent([self.e], MON, MON + timedelta(6), "x", u)
-        a = services.approve(MON, MON + timedelta(6), u)
-        self.login("HR Officer")
-        self.client.post(reverse("att-proc-reopen", args=[a.pk]), {"reason": "x"})
-        a.refresh_from_db()
-        self.assertEqual(a.status, "approved")
+    def test_hr_roles_carry_horillas_attendance_permissions_for_validating(self):
+        for role in ("HR Officer", "HR/Payroll Approver"):
+            codes = set(Group.objects.get(name=role).permissions.filter(content_type__app_label="attendance").values_list("codename", flat=True))
+            self.assertTrue({"view_attendance", "add_attendance", "change_attendance"} <= codes, role)
 
-    def test_review_page_flexible_ranges(self):
+    def test_overview_ranges_and_states(self):
         self.login("HR Officer")
-        for qs in (
-            {"start": str(MON), "end": str(MON + timedelta(2))},   # day to day
-            {"from_month": "2024-08", "to_month": "2024-09"},      # month to month
-            {},                                                    # default last 7 days
-        ):
-            r = self.client.get(reverse("att-proc-review"), qs)
-            self.assertEqual(r.status_code, 200, qs)
+        self.client.post(reverse("att-proc-process"), {"start": str(MON), "end": str(MON + timedelta(6))})
+        for qs in ({"start": str(MON), "end": str(MON + timedelta(2))}, {"from_month": "2024-08", "to_month": "2024-09"}, {}):
+            self.assertEqual(self.client.get(reverse("att-proc-review"), qs).status_code, 200, qs)
         r = self.client.get(reverse("att-proc-review"), {"start": "2024-01-01", "end": "2024-12-31"})
         self.assertContains(r, "at most 93 days")
-
-    def test_review_shows_weekly_columns_and_detail_pages(self):
-        self.login("HR Officer")
         r = self.client.get(reverse("att-proc-review"), {"start": str(MON), "end": str(MON + timedelta(9))})
-        self.assertContains(r, "Wk1")
         self.assertContains(r, "Wk2")
-        self.assertEqual(self.client.get(reverse("att-proc-day", args=[self.e.pk, str(MON)])).status_code, 200)
-        self.assertEqual(self.client.get(reverse("att-proc-approvals")).status_code, 200)
-        self.assertEqual(self.client.get(reverse("att-proc-rules")).status_code, 200)
+        self.assertContains(r, "waiting for validation")
+        Attendance.objects.filter(employee_id=self.e).update(attendance_validated=True)
+        self.assertContains(self.client.get(reverse("att-proc-review"), {"start": str(MON), "end": str(MON)}), "1 validated")
 
-    def test_correct_via_view_requires_reason(self):
+    def test_day_page_and_accept_flow(self):
+        r = self.window_rule()
+        r.windows.create(start=time(0), end=time(9))
         self.login("HR Officer")
-        d = MON + timedelta(1)
-        self.client.post(reverse("att-proc-correct"), {"employee": self.e.pk, "date": str(d), "status": "present", "reason": ""})
-        self.assertEqual(self.status(self.e, d), "missing")
-        self.client.post(reverse("att-proc-correct"), {"employee": self.e.pk, "date": str(d), "status": "present", "reason": "seen"})
-        self.assertEqual(self.status(self.e, d), "present")
-
-
-class TwoWindowTests(Base):
-    """Contract staff: night shift punches ~00:00-09:00, afternoon shift ~14:00-20:00."""
-
-    def rule(self):
-        r = AttendanceRule.objects.create(name="contract", scope="global", working_weekdays="0,1,2,3,4,5,6")
-        r.windows.create(start=time(0, 0), end=time(9, 0))
-        r.windows.create(start=time(14, 0), end=time(20, 0))
-        return r
-
-    def test_either_shift_counts_as_present(self):
-        self.rule()
-        e, f = self.emp(), self.emp()
-        self.punch(e, at(MON, 4, 52))      # night shift
-        self.punch(f, at(MON, 16, 26))     # afternoon shift
-        services.process_range(MON, MON, [e, f])
-        self.assertEqual(self.status(e, MON), "present")
-        self.assertEqual(self.status(f, MON), "present")
-
-    def test_punch_between_windows_needs_review(self):
-        self.rule()
-        e = self.emp()
-        self.punch(e, at(MON, 11, 0))
-        services.process_range(MON, MON, [e])
-        self.assertEqual(self.status(e, MON), "review")
-
-    def test_double_punch_inside_one_window_is_still_one_day(self):
-        self.rule()
-        e = self.emp()
-        self.punch(e, at(MON, 16, 26))
-        self.punch(e, at(MON, 16, 27))
-        services.process_range(MON, MON, [e])
-        self.assertEqual(self.status(e, MON), "present")
-
-    def test_two_shifts_on_one_date_goes_to_review_not_silently_one_day(self):
-        self.rule()
-        e = self.emp()
-        self.punch(e, at(MON, 7, 42))
-        self.punch(e, at(MON, 14, 35))
-        services.process_range(MON, MON, [e])
-        row = DailyAttendance.objects.get(employee=e, date=MON)
-        self.assertEqual(row.status, "review")
-        self.assertIn("two_shifts_same_day", row.flags)
-
-    def test_calculator_accepts_list_single_pair_and_none(self):
-        w = [(time(0), time(9)), (time(14), time(20))]
-        self.assertEqual(calculators.classify([time(16)], window=w, working_weekday=True, is_holiday=False, on_leave=False)[0], "present")
-        self.assertEqual(calculators.classify([time(16)], window=(time(14), time(20)), working_weekday=True, is_holiday=False, on_leave=False)[0], "present")
-        self.assertEqual(calculators.classify([time(11)], window=None, working_weekday=True, is_holiday=False, on_leave=False)[0], "present")
+        page = self.client.get(reverse("att-proc-day", args=[self.e.pk, str(MON)]))
+        self.assertContains(page, "Needs attention")
+        self.client.post(reverse("att-proc-accept"), {"employee": self.e.pk, "date": str(MON)})
+        self.assertIsNotNone(self.att(self.e, MON))
 
     def test_rule_page_saves_windows_and_rejects_overlap(self):
-        permissions.sync_groups()
-        user = make_employee(company=self.company, email="appr@x.test").employee_user_id
-        user.is_new_employee = False
-        user.save()
-        CompanyGroupAssignment.objects.create(user=user, company=self.company, group=Group.objects.get(name="HR/Payroll Approver"))
-        self.client.force_login(user)
-        base = {"name": "contract", "scope": "global", "working_weekdays": "0,1,2,3,4,5", "is_active": "on",
-                "windows-TOTAL_FORMS": "2", "windows-INITIAL_FORMS": "0", "windows-MIN_NUM_FORMS": "0", "windows-MAX_NUM_FORMS": "1000"}
+        self.login("HR/Payroll Approver")
+        base = {"name": "contract", "scope": "global", "is_active": "on", "windows-TOTAL_FORMS": "2",
+                "windows-INITIAL_FORMS": "0", "windows-MIN_NUM_FORMS": "0", "windows-MAX_NUM_FORMS": "1000"}
         bad = {**base, "windows-0-start": "00:00", "windows-0-end": "09:00", "windows-1-start": "08:00", "windows-1-end": "12:00"}
-        r = self.client.post(reverse("att-proc-rule-new"), bad)
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.client.post(reverse("att-proc-rule-new"), bad).status_code, 200)
         self.assertEqual(AttendanceRule.objects.count(), 0)
         good = {**base, "windows-0-start": "00:00", "windows-0-end": "09:00", "windows-1-start": "14:00", "windows-1-end": "20:00"}
-        r = self.client.post(reverse("att-proc-rule-new"), good)
-        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.client.post(reverse("att-proc-rule-new"), good).status_code, 302)
         rule = AttendanceRule.objects.get()
         self.assertEqual([(str(a), str(b)) for a, b in rule.window_list()], [("00:00:00", "09:00:00"), ("14:00:00", "20:00:00")])
         self.assertContains(self.client.get(reverse("att-proc-rules")), "14:00–20:00")
+        self.assertEqual(self.client.get(reverse("att-proc-rule-edit", args=[rule.pk])).status_code, 200)
+
+    def test_officer_cannot_edit_rules(self):
+        self.login("HR Officer")
+        self.assertNotEqual(self.client.get(reverse("att-proc-rule-new")).status_code, 200)

@@ -1,0 +1,12 @@
+{% load i18n %}
+{% if page.paginator.num_pages > 1 %}
+<div class="oh-pagination mt-3">
+  <span class="oh-pagination__page">{% trans "Page" %} {{ page.number }} {% trans "of" %} {{ page.paginator.num_pages }}</span>
+  <nav class="oh-pagination__nav">
+    <div class="oh-pagination__input-container me-3">
+      {% if page.has_previous %}<a class="oh-btn oh-btn--light" href="?{{ qs }}page={{ page.previous_page_number }}">‹</a>{% endif %}
+      {% if page.has_next %}<a class="oh-btn oh-btn--light" href="?{{ qs }}page={{ page.next_page_number }}">›</a>{% endif %}
+    </div>
+  </nav>
+</div>
+{% endif %}

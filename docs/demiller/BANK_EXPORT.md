@@ -6,10 +6,10 @@ Approved payroll -> validated payment workbook (Excel) -> history -> Paid.
 1. Load the bank list: **Payroll > Bank Export > Bank list > Upload** (CSV/XLSX with `CODE,NAME`), or
    `python manage.py load_banks docs/demiller/bank_codes.csv` (the 87 banks from Demiller's template).
    Codes are text (`044`, `035A`); in Excel format the CODE column as Text before saving a CSV.
-2. Give each worker a bank and account: **Worker bank accounts > Edit** (bank drop-down + 10-digit account number).
+2. **Worker bank accounts** lists **every active employee** with what the employee record says (Employee > Bank details, as typed), the bank it matched in the list, a masked account and a status; filter by name/ID, department or "needing attention". Fix a worker with **Edit** (bank drop-down + 10-digit account number).
    This writes Horilla's own `EmployeeBankDetails` (account number, bank name, bank code) and records which listed bank
    it is, so the code always comes from the list. Existing Horilla bank records resolve automatically by bank code, then
-   by exact bank name; anything else is shown as "Bank not selected from the bank list". Lists show only the last 4 digits.
+   by bank name ignoring case, spacing and words like "Bank"/"Plc" ("ACCESS BANK PLC" = Access Bank); anything else is shown with what was typed and "Bank not selected from the bank list". Lists show only the last 4 digits.
 
 ## Exporting
 - Only an **approved** payroll can be exported. The page shows employee count, total payment, narration, and every worker

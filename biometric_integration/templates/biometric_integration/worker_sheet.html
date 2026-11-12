@@ -1,5 +1,12 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
-<h2>{% trans "Worker sheet for Horilla import" %}</h2>
-<p>{% trans "Upload the device's user list. You get an Excel file for Employees > Import with the IDs as Badge IDs, names split from FIRST.LAST, and a REVIEW sheet of things to check (same name twice, IDs already in Horilla, IDs that punch but are not enrolled...). Fill in or fix departments in the WORKERS sheet, then import it. Nothing is created until you do." %}</p>
-<form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary">{% trans "Download worker sheet" %}</button></form>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Worker sheet for Horilla import" %}{% endblock %}
+{% block page_tabs %}{% include "biometric_integration/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="dm-form-card" style="max-width: 980px;">
+  <p class="text-muted">{% trans "Upload the device's user list (user.dat). You get an Excel file for Employees > Import: IDs become Badge IDs, FIRST.LAST names are split, and a REVIEW sheet lists things to check (same name twice, IDs already in Horilla, IDs that punch but are not enrolled). Fix names and fill in departments in the WORKERS sheet, then import it. Nothing is created until you do." %}</p>
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% include "demiller/_form_fields.html" with cols=6 %}
+    <div class="d-flex flex-row-reverse"><button class="oh-btn oh-btn--secondary">{% trans "Download worker sheet" %}</button></div>
+  </form>
+</div>
+{% endblock %}

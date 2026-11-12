@@ -10,18 +10,16 @@ from bank_export import permissions as b
 from weekly_payroll import permissions as w
 
 HOLDERS = {
-    # permission -> the only custom role allowed to hold it
-    "attendance_processing.approve_attendance": {"HR/Payroll Approver"},
-    "attendance_processing.reopen_attendance": {"HR/Payroll Approver"},
+    # permission -> the only custom roles allowed to hold it
     "weekly_payroll.approve_payrollrun": {"HR/Payroll Approver"},
-    "weekly_payroll.approve_workerpayprofile": {"Management"},
-    "weekly_payroll.approve_fine": {"Management"},
-    "weekly_payroll.waive_fine": {"Management"},
-    "weekly_payroll.approve_loanagreement": {"Management"},
+    "weekly_payroll.review_payrollrun": {"HR Officer", "HR/Payroll Approver"},
     "bank_export.generate_export": {"Accountant"},
     "bank_export.mark_export_paid": {"Accountant"},
     "bank_export.supersede_export": {"HR/Payroll Approver"},
     "bank_export.edit_bank_accounts": {"HR Officer"},
+    "attendance_processing.process_attendance": {"HR Officer", "HR/Payroll Approver"},
+    "attendance_processing.add_attendancerule": {"HR/Payroll Approver"},
+    "payroll.add_loanaccount": {"HR Officer"},
 }
 CUSTOM_ROLES = {"HR Officer", "HR/Payroll Approver", "Management", "Accountant", "IT Administrator"}
 
@@ -62,7 +60,8 @@ class RoleMatrixTests(TestCase):
 
     def test_accountant_cannot_change_attendance_or_approve_anything(self):
         codes = set(Group.objects.get(name="Accountant").permissions.values_list("codename", flat=True))
-        self.assertFalse({c for c in codes if c.startswith(("approve_", "correct_", "reopen_", "waive_"))})
+        self.assertFalse({c for c in codes if c.startswith(("approve_", "add_", "change_", "delete_", "review_", "process_"))
+                          and c not in ("add_bank", "change_bank")})
 
     def test_sync_is_idempotent_and_does_not_strip_admin_changes(self):
         g = Group.objects.get(name="Accountant")

@@ -1,0 +1,20 @@
+{% load widget_tweaks i18n %}
+{% comment %}Renders a Django form's visible fields in Horilla's grid. Pass cols=12 / 6 / 4 (default 6).{% endcomment %}
+{{ form.non_field_errors }}
+<div class="row">
+  {% for field in form.visible_fields %}
+    <div class="col-12 col-md-{{ cols|default:6 }} mb-3" id="id_{{ field.name }}_parent_div">
+      <div class="oh-label__info">
+        <label class="oh-label {% if field.field.required %}required-star{% endif %}" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      </div>
+      {% if field.field.widget.input_type == 'checkbox' %}
+        <div class="oh-switch" style="width: 30px;">{{ field|add_class:'oh-switch__checkbox' }}</div>
+      {% else %}
+        {{ field|add_class:'form-control' }}
+      {% endif %}
+      {% if field.help_text %}<small class="text-muted d-block mt-1">{{ field.help_text }}</small>{% endif %}
+      {{ field.errors }}
+    </div>
+  {% endfor %}
+  {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+</div>

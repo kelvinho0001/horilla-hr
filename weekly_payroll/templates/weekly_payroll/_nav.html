@@ -1,8 +1,8 @@
-{% load i18n %}
-<div style="margin-bottom:1rem;display:flex;gap:.5rem;flex-wrap:wrap;">
-  <a class="oh-btn oh-btn--light" href="{% url 'wp-runs' %}">{% trans "Payroll runs" %}</a>
-  {% if perms.weekly_payroll.view_workerpayprofile %}<a class="oh-btn oh-btn--light" href="{% url 'wp-profiles' %}">{% trans "Pay profiles" %}</a>{% endif %}
-  {% if perms.weekly_payroll.view_fine %}<a class="oh-btn oh-btn--light" href="{% url 'wp-fines' %}">{% trans "Fines" %}</a>{% endif %}
-  {% if perms.weekly_payroll.view_loanagreement %}<a class="oh-btn oh-btn--light" href="{% url 'wp-loans' %}">{% trans "Loan agreements" %}</a>{% endif %}
-</div>
-{% if messages %}{% for m in messages %}<p style="padding:.5rem;background:#f3f3f3;">{{ m }}</p>{% endfor %}{% endif %}
+{% load i18n %}{% with n=request.resolver_match.url_name %}
+<div class="oh-tabs">
+    <ul class="oh-tabs__tablist">
+      <li class="oh-tabs__tab {% if n == 'wp-runs' or n == 'wp-run-new' or n == 'wp-run-detail' %}oh-tabs__tab--active{% endif %}"><a href="{% url 'wp-runs' %}" class="text-reset">{% trans "Payroll runs" %}</a></li>
+      {% if perms.payroll.view_loanaccount %}<li class="oh-tabs__tab"><a href="{% url 'view-loan' %}" class="text-reset">{% trans "Loans, advances & fines" %} ↗</a></li>{% endif %}
+      {% if perms.bank_export.view_exportbatch %}<li class="oh-tabs__tab"><a href="{% url 'bx-dashboard' %}" class="text-reset">{% trans "Bank export" %} ↗</a></li>{% endif %}
+    </ul>
+</div>{% endwith %}

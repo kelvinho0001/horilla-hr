@@ -24,7 +24,8 @@ class BankExportConfig(AppConfig):
                     auditlog.register(m)
         post_migrate.connect(permissions.sync_groups, sender=self)
         settings.APPS.append("bank_export")
-        urlpatterns.append(path("bank-export/", include("bank_export.urls")))
+        # Not "bank-export/": Horilla's page script adds file-name/format fields to any form posting to a URL containing "export".
+        urlpatterns.append(path("bank-payments/", include("bank_export.urls")))
         # Another app's sidebar may already have resolved URLs (it reverses at import); rebuild the cache.
         from django.urls import clear_url_caches
 

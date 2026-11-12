@@ -1,42 +1,40 @@
-# weekly_payroll (Phase 4)
+# Weekly payroll (weekly_payroll)
 
-Approved daily attendance -> payroll run (any date range) -> reviewed -> approved. Excel sheet downloadable at any time.
+Everything the payroll needs is read from Horilla's own records. A payroll run is for **any date range**; the Excel sheet can be downloaded at any status.
 
-## The calculation (confirmed with Demiller)
-`AMOUNT EARNED = ROUND(TOTAL DAY / WORKING DAYS x BASIC SALARY, 2) - FINES - IOU`  (nearest kobo, half up, `Decimal` throughout)
-- TOTAL DAY = approved *present* days in the range (never raw punches; unapproved days are flagged, not counted).
-- WORKING DAYS = entered by HR when creating the run (default for all) and overridable per worker. Never hard-coded.
-- BASIC SALARY = the worker's **full-month** amount from an approved pay profile effective on the run's end date.
-- Negative net, days > working days, no approved attendance are flagged on the line (not silently clamped).
-- WEEK 1..n = one column per 7 days from the run start; the last may be shorter.
+## Where each number comes from
+| Sheet column | Source |
+|---|---|
+| WEEK 1..n, TOTAL DAY | **validated** Horilla attendance (Attendance > Attendances), one per worker per day, including attendance HR added by hand. One column per 7 days from the run start. |
+| WORKING DAYS | entered by HR when creating the run (default for all), overridable per worker. |
+| BASIC SALARY | the worker's **employee record**: Employee > Work information > Basic Salary (full month). Change it there and Recalculate. |
+| FINES | Horilla **fines**: Payroll > Loans > Fine (a loan-type record of type "Penalty / Fine"). |
+| IOU | Horilla **loans and salary advances** (Payroll > Loans > Loan / Salary Advance). |
+| AMOUNT EARNED | `ROUND(TOTAL DAY / WORKING DAYS x BASIC SALARY, 2) - FINES - IOU`, to the kobo, `Decimal` throughout. |
 
-## Fines
-HR issues a fine (fine types hold default amounts), Management approves/waives. Only approved, unwaived fines are
-deducted, **in full by the first run that gets approved after approval**; each fine is applied once. Nothing is created from
-attendance, and Horilla's own late/early penalties are untouched.
+Who is in a run: active workers who are mapped to a biometric ID or have validated attendance in the range; optionally limited to a department
+and/or worker category. A worker with no validated days shows 0 days (so HR can see who is missing).
 
-## Loans (extends Horilla `LoanAccount`)
-Create the loan in Payroll > Loans as usual, then add a **repayment agreement** (weekly or monthly instalment, first due date);
-Management approves. Instalment k falls due on first-due + (k-1) weeks/months. A run collects every uncollected instalment due on
-or before its end date, capped at the outstanding balance. Weekly runs therefore never take a monthly instalment early.
-Ledger rows (`LoanRepayment`) are written **only when a run is approved**; draft calculations and recalculation never consume an
-instalment; the database refuses to collect the same instalment twice. Early settlement and authorised adjustments need a note;
-a cleared loan is marked settled on the Horilla loan too.
+## Fines, loans and salary advances (Horilla's Payroll > Loans)
+Create them on Horilla's Loans page as usual (loan amount, number of instalments, instalment start date). Horilla schedules them as equal **monthly**
+instalments from the start date (instalment k is due k-1 months after the start date; the last instalment absorbs any kobo left over).
+A payroll run takes every instalment that is **due on or before the run's end date and not yet taken**. A fine with one instalment is therefore taken
+**in full by the first run that ends on or after its date**.
+* A monthly instalment is **not** taken by earlier weekly runs.
+* Instalments are written to a ledger only when a run is **approved** (drafts and recalculation never use one up); the database refuses to take the same instalment twice,
+  and approval re-checks and refuses ("Recalculate") if another run took it first.
+* When every instalment has been taken, the Horilla loan is marked **Settled**. A loan you mark Settled in Horilla is skipped.
+* Early settlement: mark the loan Settled in Horilla. (Weekly instalments are not supported by Horilla's loans, so they are not supported here.)
+* There is no approval step for loans and fines: Horilla's own permissions control who can create them (HR Officer has them).
 
 ## Lifecycle and locking
-Draft -> Reviewed (HR Officer or Approver) -> Approved (Approver only). Editing working days sends a reviewed run back to draft.
-Approved runs can't be recalculated or edited (service and model both refuse). Approval re-checks every instalment and fine and
-refuses with "recalculate" if another run used them first, and refuses overlapping approved periods for the same worker.
-Exported/Paid states arrive with the bank export (Phase 5).
+Draft > Reviewed (HR Officer or Approver) > Approved (Approver only) > Exported > Paid (bank export). Changing working days sends a reviewed run back to draft.
+Approved runs cannot be recalculated or edited; approval also refuses overlapping approved periods for the same worker. Blockers for review: working days missing,
+**no basic salary on the employee record**, or no workers.
 
 ## Roles
-| Group | Payroll powers |
-|---|---|
-| HR Officer | create/recalculate runs, set working days, mark reviewed, propose pay profiles/fines/loan agreements |
-| HR/Payroll Approver | everything on runs + **approve payroll** |
-| Management | approve pay profiles, fines (and waive), loan agreements; view payroll |
-| Accountant | view and download **approved** runs only |
+HR Officer: create/recalculate runs, working days, mark reviewed, loans/fines in Horilla. HR/Payroll Approver: approve payroll. Management: view. Accountant: approved runs only.
 
-## Not reusing Horilla's PayrollBatch/Payslip (deliberate)
-Its engine builds float payslips from contracts and salary structures; it cannot express this sheet. Employees, departments,
-bank details and `LoanAccount` are still Horilla's. A payslip link can be added later if wanted.
+## What changed from the first version
+The separate pay-profile (with approval), fine and loan-agreement screens were removed. Instalments that approved runs had already collected were carried across
+to the new ledger so they cannot be taken twice. Not reused: Horilla's PayrollBatch/Payslip (its float-based, contract-driven engine cannot express this sheet).

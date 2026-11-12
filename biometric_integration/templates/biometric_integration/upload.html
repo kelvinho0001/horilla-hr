@@ -1,5 +1,12 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "biometric_integration/_nav.html" %}
-<h2>{% trans "Upload attendance report" %}</h2>
-<p>{% trans "The device's own file (e.g. AEYU200860006_attlog.dat copied by USB), or CSV/Excel with an employee/user ID column and date-time column(s). A file named <serial>_attlog.dat is filed under that device automatically; for any other name pick the device below. Re-uploading the same report is safe." %}</p>
-<form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="oh-btn oh-btn--secondary" type="submit">{% trans "Import" %}</button></form>
-</section>{% endblock %}
+{% extends "demiller/page.html" %}{% load i18n %}
+{% block page_title %}{% trans "Upload attendance" %}{% endblock %}
+{% block page_tabs %}{% include "biometric_integration/_nav.html" %}{% endblock %}
+{% block page_body %}
+<div class="dm-form-card" style="max-width: 760px;">
+  <p class="text-muted">{% trans "Use the file copied from the device by USB (for example AEYU200860006_attlog.dat), or a CSV/Excel report with an employee ID column and date/time columns. A file named <serial>_attlog.dat is filed under that device automatically; for any other name choose the device below. Uploading the same file again is safe." %}</p>
+  <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    {% include "demiller/_form_fields.html" with cols=12 %}
+    <div class="d-flex flex-row-reverse"><button class="oh-btn oh-btn--secondary">{% trans "Import" %}</button></div>
+  </form>
+</div>
+{% endblock %}

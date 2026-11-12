@@ -29,7 +29,8 @@ class Base(PayBase):
 
     def paid_worker(self, basic="70000", days=28, acct=None, bank=None, with_bank=True):
         e = self.worker(basic)
-        self.present(e, days)
+        if days:
+            self.present(e, days)
         if with_bank:
             services.save_worker_bank(e, bank or self.access, acct or f"{next_n():010d}")
         return e
@@ -108,6 +109,15 @@ class AccountTests(Base):
         self.assertEqual(services.resolve_bank(e)[2], ["No bank details"])
         EmployeeBankDetails.objects.create(employee_id=e, bank_name="Access Bank", account_number="12ab")
         self.assertTrue(any("digits" in i for i in services.resolve_bank(e)[2]))
+
+    def test_bank_names_typed_on_the_employee_record_match_the_list(self):
+        for typed in ("ACCESS BANK PLC", "access bank", "Access  Bank"):
+            e = self.worker()
+            EmployeeBankDetails.objects.create(employee_id=e, bank_name=typed, account_number=f"{next_n():010d}")
+            self.assertEqual(services.resolve_bank(e)[0], self.access, typed)
+        e = self.worker()
+        EmployeeBankDetails.objects.create(employee_id=e, bank_name="Some Other Bank", account_number=f"{next_n():010d}")
+        self.assertIsNone(services.resolve_bank(e)[0])
 
     def test_mask(self):
         self.assertEqual(services.mask("0123456789"), "••••••6789")
@@ -307,6 +317,25 @@ class RoleViewTests(Base):
         })
         self.assertEqual(r.status_code, 302)
         self.assertEqual(services.resolve_bank(e)[0], self.alat)
+
+    def test_accounts_page_shows_what_the_employee_record_says_for_every_employee(self):
+        a = self.worker()
+        EmployeeBankDetails.objects.create(employee_id=a, bank_name="Access Bank Plc", account_number="0123456789")
+        b = self.worker()
+        EmployeeBankDetails.objects.create(employee_id=b, bank_name="Weird Bank", account_number="0000000042")
+        c = self.worker()  # no bank details at all
+        self.login("HR Officer")
+        page = self.client.get(reverse("bx-accounts")).content.decode()
+        self.assertIn("Access Bank Plc", page)            # as typed on the employee record
+        self.assertIn("Access Bank (044)", page)          # matched to the bank list
+        self.assertIn("••••••6789", page)
+        self.assertNotIn("0123456789", page)
+        self.assertIn("Weird Bank", page)
+        self.assertIn("Bank not selected from the bank list", page)
+        self.assertIn(c.badge_id, page)                    # listed even though nothing was saved for it
+        problems = self.client.get(reverse("bx-accounts"), {"problems": "1"}).content.decode()
+        self.assertNotIn("Access Bank (044)", problems)
+        self.assertEqual(self.client.get(reverse("bx-accounts"), {"q": a.badge_id}).status_code, 200)
 
     def test_accountant_uploads_bank_list(self):
         from django.core.files.uploadedfile import SimpleUploadedFile

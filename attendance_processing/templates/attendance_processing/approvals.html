@@ -1,8 +1,0 @@
-{% extends "index.html" %}{% load i18n %}{% block content %}<section class="oh-wrapper" style="padding:1.5rem;">{% include "attendance_processing/_nav.html" %}
-<h2>{% trans "Attendance approvals" %}</h2>
-<table class="oh-table" style="width:100%"><thead><tr><th>{% trans "Range" %}</th><th>{% trans "Dept" %}</th><th>{% trans "Days" %}</th><th>{% trans "Approved by" %}</th><th>{% trans "Status" %}</th><th></th></tr></thead>
-{% for a in approvals %}<tr><td>{{ a.start_date }} → {{ a.end_date }}</td><td>{{ a.department|default:"All" }}</td><td>{{ a.day_count }}</td><td>{{ a.approved_by }} {{ a.approved_at|date:"Y-m-d H:i" }}</td>
-<td>{{ a.get_status_display }}{% if a.reopen_reason %}<br><small>{{ a.reopened_by }}: {{ a.reopen_reason }}</small>{% endif %}</td>
-<td>{% if can_reopen and a.status == "approved" %}<form method="post" action="{% url 'att-proc-reopen' a.pk %}">{% csrf_token %}<input name="reason" required placeholder="{% trans 'Reason' %}"><button class="oh-btn oh-btn--light">{% trans "Reopen" %}</button></form>{% endif %}</td></tr>
-{% empty %}<tr><td colspan="6">{% trans "No approvals yet." %}</td></tr>{% endfor %}</table>
-</section>{% endblock %}

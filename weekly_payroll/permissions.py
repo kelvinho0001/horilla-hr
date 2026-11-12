@@ -1,4 +1,4 @@
-"""Roles for payroll, seeded additively like attendance_processing (same Horilla pattern)."""
+"""Roles for payroll, seeded additively (same Horilla pattern as the other apps)."""
 
 from django.contrib.auth.models import Group, Permission
 
@@ -6,22 +6,15 @@ P = "weekly_payroll."
 ROLE_PERMISSIONS = {
     "HR Officer": [
         P + "view_payrollrun", P + "add_payrollrun", P + "change_payrollrun", P + "review_payrollrun",
-        P + "view_workerpayprofile", P + "add_workerpayprofile",
-        P + "view_fine", P + "add_fine", P + "view_finetype",
-        P + "view_loanagreement", P + "add_loanagreement",
+        # loans, salary advances and fines live on Horilla's own Payroll > Loans page
+        "payroll.view_loanaccount", "payroll.add_loanaccount", "payroll.change_loanaccount",
     ],
     "HR/Payroll Approver": [
         P + "view_payrollrun", P + "add_payrollrun", P + "change_payrollrun",
         P + "review_payrollrun", P + "approve_payrollrun",
-        P + "view_workerpayprofile", P + "view_fine", P + "view_finetype", P + "view_loanagreement",
+        "payroll.view_loanaccount",
     ],
-    "Management": [
-        P + "view_payrollrun",
-        P + "view_workerpayprofile", P + "approve_workerpayprofile",
-        P + "view_fine", P + "approve_fine", P + "waive_fine",
-        P + "view_loanagreement", P + "approve_loanagreement",
-        "attendance_processing.view_dailyattendance",
-    ],
+    "Management": [P + "view_payrollrun", "payroll.view_loanaccount"],
     "Accountant": [P + "view_payrollrun"],
 }
 

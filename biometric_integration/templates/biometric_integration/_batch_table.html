@@ -1,9 +1,37 @@
 {% load i18n %}
-<table class="oh-table" style="width:100%;">
-  <thead><tr><th>{% trans "When" %}</th><th>{% trans "Provider" %}</th><th>{% trans "File" %}</th><th>{% trans "Period" %}</th><th>{% trans "Received" %}</th><th>{% trans "Imported" %}</th><th>{% trans "Duplicates" %}</th><th>{% trans "Unmapped" %}</th><th>{% trans "Failed" %}</th><th>{% trans "Status" %}</th></tr></thead>
-  <tbody>{% for b in batches %}
-    <tr><td><a href="{% url 'bio-int-batch-detail' b.pk %}">{{ b.started_at|date:"Y-m-d H:i" }}</a></td><td>{{ b.provider }}</td><td>{{ b.file_name }}</td>
-    <td>{% if b.period_start %}{{ b.period_start }} → {{ b.period_end }}{% endif %}</td>
-    <td>{{ b.received_count }}</td><td>{{ b.imported_count }}</td><td>{{ b.duplicate_count }}</td><td>{{ b.unmapped_count }}</td><td>{{ b.failed_count }}</td><td>{{ b.get_status_display }}</td></tr>
-  {% empty %}<tr><td colspan="10">{% trans "No imports yet." %}</td></tr>{% endfor %}</tbody>
-</table>
+<div class="oh-sticky-table">
+  <div class="oh-sticky-table__table">
+    <div class="oh-sticky-table__thead">
+      <div class="oh-sticky-table__tr">
+        <div class="oh-sticky-table__th">{% trans "When" %}</div>
+        <div class="oh-sticky-table__th">{% trans "Source" %}</div>
+        <div class="oh-sticky-table__th">{% trans "File" %}</div>
+        <div class="oh-sticky-table__th">{% trans "Period" %}</div>
+        <div class="oh-sticky-table__th">{% trans "Received" %}</div>
+        <div class="oh-sticky-table__th">{% trans "New" %}</div>
+        <div class="oh-sticky-table__th">{% trans "Duplicates" %}</div>
+        <div class="oh-sticky-table__th">{% trans "Unmapped" %}</div>
+        <div class="oh-sticky-table__th">{% trans "Errors" %}</div>
+        <div class="oh-sticky-table__th">{% trans "Status" %}</div>
+      </div>
+    </div>
+    <div class="oh-sticky-table__tbody">
+      {% for b in batches %}
+        <div class="oh-sticky-table__tr" onclick="window.location='{% url 'bio-int-batch-detail' b.pk %}'" style="cursor:pointer">
+          <div class="oh-sticky-table__sd">{{ b.started_at|date:"d M Y H:i" }}</div>
+          <div class="oh-sticky-table__td">{{ b.provider }}</div>
+          <div class="oh-sticky-table__td">{{ b.file_name|default:"—" }}</div>
+          <div class="oh-sticky-table__td">{% if b.period_start %}{{ b.period_start|date:"d M" }} → {{ b.period_end|date:"d M Y" }}{% else %}—{% endif %}</div>
+          <div class="oh-sticky-table__td">{{ b.received_count }}</div>
+          <div class="oh-sticky-table__td">{{ b.imported_count }}</div>
+          <div class="oh-sticky-table__td">{{ b.duplicate_count }}</div>
+          <div class="oh-sticky-table__td">{{ b.unmapped_count }}</div>
+          <div class="oh-sticky-table__td">{{ b.failed_count }}</div>
+          <div class="oh-sticky-table__td"><span class="oh-dot oh-dot--{% if b.status == 'success' %}success{% elif b.status == 'partial' %}warning{% else %}danger{% endif %}"></span> {{ b.get_status_display }}</div>
+        </div>
+      {% empty %}
+        <div class="oh-sticky-table__tr"><div class="oh-sticky-table__td" style="grid-column: 1 / -1">{% trans "No imports yet." %}</div></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>

@@ -4,18 +4,18 @@
 | Group | For | Key powers |
 |---|---|---|
 | IT Administrator | whoever runs the biometric import | import reports, providers, mappings |
-| HR Officer | HR staff | process/correct attendance, create payroll runs, mark reviewed, propose pay profiles/fines/loans, edit worker bank accounts |
-| HR/Payroll Approver | one or two senior HR people | approve/reopen attendance, **approve payroll**, supersede an export |
-| Management | MD / directors | approve pay profiles, fines, loan agreements; view |
+| HR Officer | HR staff | add punches to Attendances and validate, create payroll runs, mark reviewed, propose pay profiles/fines/loans, edit worker bank accounts |
+| HR/Payroll Approver | one or two senior HR people | **approve payroll**, supersede an export, edit attendance rules |
+| Management | MD / directors | view payroll, loans and attendance |
 | Accountant | accounts | bank list, generate/download payment file, mark paid |
 
 Horilla applies a group only in a company where the user holds a **company group assignment**; assign groups on the user's role
 screen for the right company. `python manage.py test bank_export.tests.test_roles_matrix` proves the sensitive permissions sit with
-exactly one role; re-run it after changing permissions. Keep the approver group small. A person who proposes should not be the one who approves where you can avoid it.
+the intended roles; re-run it after changing permissions. Keep the approver group small. A person who proposes should not be the one who approves where you can avoid it.
 
 ## Daily / weekly / monthly
 * **Daily**: backup email/cron OK. **Weekly**: `python manage.py demiller_check`; disk space; look at Biometric Import > history for failed or unmapped rows.
-* **Each pay run**: upload attendance -> review -> approve attendance -> create payroll run (working days) -> review -> approve -> generate payment file -> mark paid.
+* **Each pay run**: upload attendance -> Add punches to Attendances -> validate in Attendances -> create payroll run (working days) -> review -> approve -> generate payment file -> mark paid.
 * **Quarterly**: restore a backup into a scratch database and open it; review who holds approver/Management/Accountant groups; remove leavers.
 
 ## Monitoring
@@ -47,8 +47,7 @@ Code: previous tag + restart. If migrations ran: restore the pre-update database
 ## Corrections after approval
 Approved payroll is locked on purpose: there is no "un-approve" button. If a mistake is found **before** a payment file is generated, ask
 IT to cancel it at database level under the MD's written approval (not provided as a feature). If found after payment: correct it in the next
-run with a fine/loan adjustment (with reason) and note it. For attendance, an Approver can **reopen** an approved range with a reason; the
-reopen is recorded. A generated payment file can be **superseded** (reason, Approver) until it is marked paid.
+run with a fine/loan adjustment (with reason) and note it. For attendance, validated records can be edited on Horilla's Attendances page (Horilla records who changed them); payroll only counts what is validated when a run is calculated, and an approved run is a fixed snapshot. A generated payment file can be **superseded** (reason, Approver) until it is marked paid.
 
 ## Data protection (Nigeria: NDPA 2023 / NDPR)
 * Only attendance metadata is imported; **no fingerprint/face data** is stored in Horilla. Keep it that way.

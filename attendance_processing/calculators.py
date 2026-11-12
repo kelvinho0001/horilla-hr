@@ -1,8 +1,8 @@
-"""Pure functions (no database): easy to test and reused by payroll later."""
+"""Pure functions (no database): easy to test and reused by payroll."""
 
 from datetime import time, timedelta
 
-from .models import ABSENT, HOLIDAY, LEAVE, MISSING, PRESENT, REST, REVIEW  # noqa: F401
+OK, ATTENTION = "ok", "attention"
 
 
 def _windows(window):
@@ -14,38 +14,30 @@ def _windows(window):
     return [tuple(w) for w in window]
 
 
-def classify(punch_times, *, window, working_weekday, is_holiday, on_leave):
+def classify(punch_times, window=None):
     """
-    Decide one day's status from the local times of that day's punches.
+    Decide whether one day's punches make a day of attendance.
 
-    ``window`` is None, a (start, end) pair or a list of pairs (e.g. night and afternoon shift).
-    Several punches never mean several days: any number of in-window punches is still one
-    PRESENT. But in-window punches in two *different* windows (two shifts in one day) go to
-    review instead of being counted silently. Returns (status, flags).
+    ``window`` is None (any time counts), a (start, end) pair, or a list of pairs (e.g. night and afternoon
+    shift). Any number of valid punches is still ONE day. Punches in two different windows (two shifts in
+    one day) are not counted silently; neither are punches that fall outside every window.
+    Returns (OK | ATTENTION, flags).
     """
     flags = []
     windows = _windows(window)
-    if punch_times:
-        if len(punch_times) > 1:
-            flags.append("multiple_punches")
-        in_window = [t for t in punch_times if not windows or any(a <= t <= b for a, b in windows)]
-        used = {i for t in in_window for i, (a, b) in enumerate(windows) if a <= t <= b}
-        if len(used) > 1:
-            flags.append("two_shifts_same_day")
-            return REVIEW, flags
-        if in_window:
-            if is_holiday or not working_weekday:
-                flags.append("worked_on_non_working_day")
-            return PRESENT, flags
-        flags.append("out_of_window")
-        return REVIEW, flags
-    if on_leave:
-        return LEAVE, flags
-    if is_holiday:
-        return HOLIDAY, flags
-    if not working_weekday:
-        return REST, flags
-    return MISSING, flags
+    if not punch_times:
+        return None, flags
+    if len(punch_times) > 1:
+        flags.append("multiple_punches")
+    in_window = [t for t in punch_times if not windows or any(a <= t <= b for a, b in windows)]
+    used = {i for t in in_window for i, (a, b) in enumerate(windows) if a <= t <= b}
+    if len(used) > 1:
+        flags.append("two_shifts_same_day")
+        return ATTENTION, flags
+    if in_window:
+        return OK, flags
+    flags.append("out_of_window")
+    return ATTENTION, flags
 
 
 def week_buckets(start, end):

@@ -13,6 +13,6 @@ SUBMENUS.append(
         "menu": _("Bank Export"),
         "redirect": reverse_lazy("bx-dashboard"),
         "accessibility": "bank_export.sidebar.access",
-        "match_prefixes": ["/bank-export/"],
+        "match_prefixes": ["/bank-payments/"],
     }
 )

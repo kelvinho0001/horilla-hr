@@ -1,0 +1,47 @@
+{% extends "index.html" %}{% load i18n %}
+{% comment %}
+Shared page shell for the Demiller screens. Same look as Horilla's own pages (e.g. Attendance > Attendances):
+a white rounded card holding chip-style tabs, a bold title with action buttons on the right, and the content.
+Blocks: page_tabs (include an app _nav.html), page_title, page_actions, page_body.
+{% endcomment %}
+{% block content %}
+<style>
+  .dm-card .oh-tabs__tab { display:flex; align-items:center; padding:4px 10px; gap:.5rem; border:1px solid #f6f6f6; border-radius:6px; color:#1f2937; font-size:.8rem; height:auto; max-height:none; flex-grow:0; transition:all 300ms; }
+  .dm-card .oh-tabs__tab a { color: inherit; text-decoration: none; }
+  .dm-card .oh-tabs__tab--active { background-color: {{ theme_obj.primary_200|default:"#fcedeb" }}; color: {{ theme_obj.primary_600|default:"#e54f38" }}; border:1px solid {{ theme_obj.primary_600|default:"#e54f38" }}; }
+  .dm-card .oh-tabs__tab:not(.oh-tabs__tab--active):hover { background-color: {{ theme_obj.primary_100|default:"#FFF5F1" }}; border:1px solid {{ theme_obj.primary_300|default:"#FCEDEB" }}; cursor:pointer; }
+  .dm-card .oh-tabs__tablist { display:flex; flex-wrap:wrap; gap:.25rem; width:auto; border:0; padding:0; margin:0; }
+  .dm-card .dm-title { font-size:1.15rem; font-weight:700; margin:0; }
+  .dm-card .dm-actions { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; }
+  .dm-card .dm-actions form { margin:0; }
+  .dm-card .oh-sticky-table { margin-bottom: .5rem; }
+  .dm-stat { border:1px solid #ececec; border-radius:8px; padding:.75rem 1rem; height:100%; }
+  .dm-stat small { color:#6b7280; display:block; }
+  .dm-stat .dm-num { font-size:1.35rem; font-weight:700; line-height:1.2; }
+  .dm-form-card { border:1px solid #ececec; border-radius:8px; padding:1.25rem; }
+  .dm-muted { color:#6b7280; }
+  .dm-card h5 { font-weight:700; font-size:1rem; margin:1.25rem 0 .5rem; }
+  .dm-dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; background:#9ca3af; }
+  .dm-dot--success { background:#16a34a; } .dm-dot--warning { background:#f59e0b; } .dm-dot--danger { background:#dc2626; } .dm-dot--info { background:#3b82f6; }
+  .dm-table-wrap { overflow-x:auto; border:1px solid #ececec; border-radius:8px; }
+  .dm-table { border-collapse:collapse; width:100%; font-size:.82rem; margin:0; }
+  .dm-table th { background:#fafafa; font-weight:600; padding:.55rem .6rem; border-bottom:1px solid #ececec; white-space:nowrap; text-align:left; }
+  .dm-table td { padding:.4rem .6rem; border-bottom:1px solid #f2f2f2; white-space:nowrap; vertical-align:middle; }
+  .dm-table th.c, .dm-table td.c { text-align:center; } .dm-table th.r, .dm-table td.r { text-align:right; }
+  .dm-table .dm-first { position:sticky; left:0; background:#fff; z-index:1; border-right:1px solid #ececec; white-space:normal; min-width:190px; max-width:260px; }
+  .dm-table thead .dm-first { background:#fafafa; }
+  .dm-table tbody tr:hover td { background:#fafafa; }
+  .dm-table td.dm-cell { padding:.25rem .2rem; min-width:34px; }
+  .dm-flag { display:block; color:#dc2626; font-size:.72rem; }
+</style>
+<div class="oh-wrapper" style="padding-top: 1.5rem; padding-bottom: 2rem;">
+  <div class="bg-white p-3 rounded-md shadow-card dm-card" style="background:#fff; border-radius:8px; padding:1rem;">
+    {% block page_tabs %}{% endblock %}
+    <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; margin:1rem 0;">
+      <h1 class="dm-title">{% block page_title %}{% endblock %}</h1>
+      <div class="dm-actions">{% block page_actions %}{% endblock %}</div>
+    </div>
+    {% block page_body %}{% endblock %}
+  </div>
+</div>
+{% endblock %}
