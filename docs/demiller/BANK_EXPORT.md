@@ -11,6 +11,12 @@ Approved payroll -> validated payment workbook (Excel) -> history -> Paid.
    it is, so the code always comes from the list. Existing Horilla bank records resolve automatically by bank code, then
    by bank name ignoring case, spacing and words like "Bank"/"Plc" ("ACCESS BANK PLC" = Access Bank); anything else is shown with what was typed and "Bank not selected from the bank list". Lists show only the last 4 digits.
 
+## Bank dropdown on the employee record
+Employee > Bank details (the edit page and the profile tab) now has **Bank Name as a dropdown of the bank list**. Picking a bank fills **Bank Code #1** by itself
+and **Branch** defaults to **Lagos** (setting `BANK_DEFAULT_BRANCH`; a branch typed by hand is kept). The server sets the code from the list again on save, so it cannot disagree with it.
+Records that already have a free-text bank keep it as an extra "(not in the bank list)" choice until you pick the right bank. If the bank list is empty, Horilla's plain text boxes stay.
+The only edit to Horilla's own code is two small hook calls at the end of the two bank forms in `employee/forms.py`; the logic is in `bank_export/employee_form.py`.
+
 ## Exporting
 - Only an **approved** payroll can be exported. The page shows employee count, total payment, narration, and every worker
   with a missing/invalid bank or account. Workers with zero or negative net are skipped, not exported.

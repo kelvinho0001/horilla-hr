@@ -530,6 +530,13 @@ class EmployeeBankDetailsForm(ModelForm):
         self.fields["address"].widget.attrs["autocomplete"] = "address"
         for visible in self.visible_fields():
             visible.field.widget.attrs["class"] = "oh-input w-100"
+        # Demiller Farms: bank dropdown + auto Bank Code #1 / Branch (only when the bank_export app is installed)
+        from django.apps import apps as django_apps
+
+        if django_apps.is_installed("bank_export"):
+            from bank_export.employee_form import apply_bank_dropdown
+
+            apply_bank_dropdown(self)
 
     def as_p(self, *args, **kwargs):
         context = {"form": self}
@@ -556,6 +563,13 @@ class EmployeeBankDetailsUpdateForm(ModelForm):
             visible.field.widget.attrs["class"] = "oh-input w-100"
         for field in self.fields:
             self.fields[field].widget.attrs["placeholder"] = self.fields[field].label
+        # Demiller Farms: bank dropdown + auto Bank Code #1 / Branch (only when the bank_export app is installed)
+        from django.apps import apps as django_apps
+
+        if django_apps.is_installed("bank_export"):
+            from bank_export.employee_form import apply_bank_dropdown
+
+            apply_bank_dropdown(self)
 
     def as_p(self, *args, **kwargs):
         context = {"form": self}
