@@ -166,6 +166,25 @@ Complete Horilla's first-run screens if shown (company, first user).
 3. Create an Attendance Rule with the real attendance windows (Attendance > Biometric Attendance > Attendance rules).
 4. Put each worker's monthly salary in Payroll > Contracts (Contract wage) or on the employee record (Employee > Work information), check their bank details (Payroll > Bank Export > Worker bank accounts) and map biometric IDs (Attendance > Biometric Import). Loans, salary advances and fines go in Payroll > Loans.
 
+## 9b. Clearing demo data to start with real data
+
+Back up first (`scripts/backup.sh`, section 10). Then, in Terminal with the virtualenv active:
+
+```bash
+python manage.py demiller_clear_demo_data            # dry run: lists what would be removed, changes nothing
+python manage.py demiller_clear_demo_data --yes      # really removes it, in one all-or-nothing step
+```
+
+**Removed:** workers (employees and their login accounts), biometric punches / imports / ID mappings / device sources, all attendance records,
+payroll runs and the loan ledger, bank payment files, Horilla loans / salary advances / fines, Horilla payslips and batches, and the workers' contracts and bank details.
+**Kept:** the company, departments, job positions, worker categories, shifts, holidays, roles/groups and who holds them, attendance rules, the bank list, the payment template,
+mail server settings, and the people you keep: every superuser, everyone who holds a role group, and anyone listed in `--keep-badges SE001,SE002`.
+If a removed worker is still referenced by a kept employee's record, nothing is changed and the command tells you which one to keep.
+This cannot be undone except by restoring the backup.
+
+To wipe **everything** instead (including company, roles and settings), stop the app, move the database file away, run `python manage.py migrate`, `python manage.py load_banks docs/demiller/bank_codes.csv`
+and create the admin again (section 8).
+
 ## 10. Backups (do this before real data goes in)
 
 ```bash
