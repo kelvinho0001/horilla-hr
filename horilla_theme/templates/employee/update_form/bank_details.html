@@ -51,6 +51,13 @@
                         {{ bank_form.any_other_code2|add_class:"emp-input w-full h-9 px-3 text-xs border border-secondary-200 rounded-md bg-white text-dark-500" }}
                         {{ bank_form.any_other_code2.errors }}
                     </div>
+                    {% if bank_form.account_name %}
+                    <div>
+                        <label class="block text-xs font-medium text-color-600 mb-1" for="id_account_name">{% trans "Account Name" %}</label>
+                        {{ bank_form.account_name|add_class:"emp-input w-full h-9 px-3 text-xs border border-secondary-200 rounded-md bg-gray-50 text-dark-500" }}
+                        <small class="text-color-600">{{ bank_form.account_name.help_text }}</small>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 

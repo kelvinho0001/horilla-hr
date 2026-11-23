@@ -168,7 +168,10 @@ def account_edit(request, employee_id):
         else:
             messages.success(request, _("Bank account saved."))
             return redirect("bx-accounts")
-    return render(request, T + "account_form.html", {"form": form, "emp": emp})
+    details = EmployeeBankDetails.objects.filter(employee_id=emp).select_related("verification").first()
+    return render(request, T + "account_form.html", {
+        "form": form, "emp": emp, "check": paystack.current_status(details) if details else None,
+    })
 
 
 # ------------------------------------------------------------ Paystack (Settings > General > Paystack)

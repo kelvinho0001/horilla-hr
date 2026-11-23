@@ -23,6 +23,13 @@ class BankExportConfig(AppConfig):
                 else:
                     auditlog.register(m)
         post_migrate.connect(permissions.sync_groups, sender=self)
+        from django.db.models.signals import post_save
+
+        from employee.models import EmployeeBankDetails
+
+        from . import signals
+
+        post_save.connect(signals.verify_after_save, sender=EmployeeBankDetails, dispatch_uid="bx_verify_after_save")
         settings.APPS.append("bank_export")
         # Not "bank-export/": Horilla's page script adds file-name/format fields to any form posting to a URL containing "export".
         urlpatterns.append(path("bank-payments/", include("bank_export.urls")))

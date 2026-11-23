@@ -38,6 +38,7 @@
       <div class="mi__kpi"><div class="mi__kpi-label">{% trans "With Errors" %}</div><div class="mi__kpi-value {% if summary.error_count %}mi__kpi-value--bad{% endif %}">{{ summary.error_count }}</div></div>
       {% if summary.counts and dataset.key == "employees" %}
       <div class="mi__kpi"><div class="mi__kpi-label">{% if summary.mode == "update" %}{% trans "Bank Accounts Added" %}{% else %}{% trans "Bank Accounts" %}{% endif %}</div><div class="mi__kpi-value">{{ summary.counts.banks }}</div></div>
+      {% if summary.counts.bank_verified or summary.counts.bank_unchecked %}<div class="mi__kpi"><div class="mi__kpi-label">{% trans "Accounts Verified" %}</div><div class="mi__kpi-value mi__kpi-value--ok">{{ summary.counts.bank_verified|default:0 }}</div>{% if summary.counts.bank_unchecked %}<div class="mi__kpi-note">{{ summary.counts.bank_unchecked }} {% trans "Not Checked: See Bank Payments > Accounts" %}</div>{% endif %}</div>{% endif %}
       {% endif %}
     </div>
 

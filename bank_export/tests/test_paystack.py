@@ -146,3 +146,65 @@ class PaystackSettingsPageTests(TestCase):
         make_employee(company=make_company("Other"), email="plain@x.test", user=u)
         self.client.force_login(u)
         self.assertNotEqual(self.client.get(reverse("bx-paystack")).status_code, 200)
+
+
+class MasterImportBankTests(TestCase):
+    """The Employees import (master_import): Bank Name is derived from Bank Code 1; account name comes from Paystack."""
+
+    @classmethod
+    def setUpTestData(cls):
+        Bank.objects.create(code="044", name="Access Bank")
+        cls.company = make_company("Test Corp")
+
+    def rows(self, *specs):
+        out = []
+        for i, (acct, code) in enumerate(specs, start=1):
+            r = row(f"M{i}", "Ada" if i == 1 else f"Name{i}", "Obi" if i == 1 else "Eze", acct, code)
+            r["Company"] = "Test Corp"
+            r["__row"] = i
+            out.append({k: v for k, v in r.items() if v is not None})
+        return out
+
+    def test_bank_name_and_branch_come_from_the_code_and_bank_problems_are_row_errors(self):
+        from master_import.datasets.base import Context
+        from master_import.datasets.employees import EmployeesDataset
+
+        ds = EmployeesDataset()
+        ctx = Context(company=self.company)
+        res = ds.check(self.rows(("0123456789", "44"), ("5555555555", "999"), ("12345", "044"), ("0123456789", "044")), ctx)
+        ok = {r["Badge ID"]: r for r in res.valid}
+        self.assertEqual(set(ok), {"M1"})
+        self.assertEqual((ok["M1"]["Bank Name"], ok["M1"]["Bank Code 1"], ok["M1"]["Bank Branch"]),
+                         ("Access Bank", "044", "Lagos"))
+        text = " ".join(str(e) for e in res.errors)
+        self.assertIn("not in the bank list", text)
+        self.assertIn("10 digits", text)
+        self.assertIn("used twice", text)
+
+    @mock.patch("bank_export.paystack.requests.get", side_effect=paystack_ok)
+    def test_commit_saves_name_and_verifies(self, get):
+        from master_import.datasets.base import Context
+        from master_import.datasets.employees import EmployeesDataset
+
+        PaystackSettings.objects.create(secret_key="sk_test_abc")
+        ds = EmployeesDataset()
+        ctx = Context(company=self.company)
+        res = ds.check(self.rows(("0123456789", "044")), ctx)
+        out = ds.commit(res.valid, ctx)
+        d = EmployeeBankDetails.objects.get(employee_id__badge_id="M1")
+        self.assertEqual((d.bank_name, d.any_other_code1, d.branch), ("Access Bank", "044", "Lagos"))
+        self.assertEqual(d.verification.account_name, "ADA OBI")
+        self.assertEqual(out["bank_verified"], 1)
+        self.assertTrue(hasattr(d, "bank_link"))
+
+    def test_account_name_field_is_read_only_on_the_employee_form(self):
+        from employee.forms import EmployeeBankDetailsUpdateForm
+
+        emp = make_employee(company=self.company, email="f@x.test")
+        d = EmployeeBankDetails.objects.create(employee_id=emp, bank_name="Access Bank",
+                                               account_number="0123456789", any_other_code1="044", branch="Lagos")
+        AccountVerification.objects.create(details=d, status="verified", account_number="0123456789",
+                                           bank_code="044", account_name="ADA OBI", name_matches=True)
+        f = EmployeeBankDetailsUpdateForm(instance=d)
+        self.assertTrue(f.fields["account_name"].disabled)
+        self.assertIn("ADA OBI", str(f["account_name"]))

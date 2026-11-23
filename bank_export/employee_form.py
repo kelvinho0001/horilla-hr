@@ -38,10 +38,30 @@ class BankSelect(forms.Select):
         return option
 
 
+def add_account_name(form):
+    """Read-only 'Account Name': what Paystack says the account is called (blank until it has been checked)."""
+    from . import paystack
+
+    inst = form.instance
+    v = paystack.current_status(inst) if inst is not None and inst.pk else None
+    if v is not None and v.status == "verified":
+        text = v.account_name + (" (differs from the employee name)" if v.name_matches is False else "")
+    elif v is not None and v.status == "failed":
+        text = "Account not found at this bank"
+    else:
+        text = ""
+    form.fields["account_name"] = forms.CharField(
+        label=_("Account Name"), required=False, disabled=True, initial=text,
+        widget=forms.TextInput(attrs={"readonly": "readonly", "placeholder": _("Filled in automatically after saving")}),
+        help_text=_("Read only: the name the bank holds for this account number."),
+    )
+
+
 def apply_bank_dropdown(form):
     """Call at the end of an EmployeeBankDetails form's __init__."""
     if "bank_name" not in form.fields:
         return
+    add_account_name(form)
     banks = list(Bank.objects.filter(is_active=True).order_by("name"))
     if not banks:
         return

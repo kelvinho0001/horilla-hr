@@ -14,7 +14,7 @@
 <p class="mb-2"><b>{{ problem_count }}</b> {% trans "of" %} {{ total }} {% trans "need attention" %}. <span class="text-muted">{% trans "Details come from each worker's Employee > Bank details; pick the matching bank from the list so the bank code is exact. Only the last 4 digits of an account are shown." %}</span></p>
 <div class="oh-sticky-table"><div class="oh-sticky-table__table">
   <div class="oh-sticky-table__thead"><div class="oh-sticky-table__tr">
-    <div class="oh-sticky-table__th">{% trans "Worker" %}</div><div class="oh-sticky-table__th">{% trans "Bank on employee record" %}</div><div class="oh-sticky-table__th">{% trans "Matched bank (code)" %}</div><div class="oh-sticky-table__th">{% trans "Account" %}</div><div class="oh-sticky-table__th">{% trans "Status" %}</div><div class="oh-sticky-table__th">{% trans "Paystack check" %}</div><div class="oh-sticky-table__th"></div>
+    <div class="oh-sticky-table__th">{% trans "Worker" %}</div><div class="oh-sticky-table__th">{% trans "Bank on employee record" %}</div><div class="oh-sticky-table__th">{% trans "Matched bank (code)" %}</div><div class="oh-sticky-table__th">{% trans "Account" %}</div><div class="oh-sticky-table__th">{% trans "Status" %}</div><div class="oh-sticky-table__th">{% trans "Account name (Paystack)" %}</div><div class="oh-sticky-table__th"></div>
   </div></div>
   <div class="oh-sticky-table__tbody">
     {% for r in page %}<div class="oh-sticky-table__tr">

@@ -50,3 +50,15 @@ HR/Payroll Approver: supersede. Management: view exports. Only the app creates f
 - At most 40 accounts are checked per import. Check the rest from **Bank Payments > Accounts** ("Check all unverified accounts"). Changing an account number or bank code on a record voids its earlier check.
 
 **Setup:** Settings > General > **Paystack**: paste the secret key (`sk_live_...` / `sk_test_...`), then "Save and test the key". Fallback: `PAYSTACK_SECRET_KEY` environment variable. Run `python manage.py migrate` after pulling. Needs outbound HTTPS to `api.paystack.co`.
+
+### Which import this applies to
+
+The **Employees > Import** page with the mapping step is the `master_import` app. In your sheet only **Bank Code 1** and **Account Number** are needed: **Bank Name** is filled from the bank list (you no longer have to map it), **Bank Branch** defaults to Lagos, and the account is checked (10 digits, not used by another employee). The "done" page shows how many accounts Paystack verified.
+
+### Account Name (read only)
+
+Paystack returns the name the bank holds for the account. It is shown, read only, in:
+- Employee > Bank details form (**Account Name**) and the profile bank card;
+- Bank Payments > Accounts (column "Account name (Paystack)") and the worker's edit page.
+
+Saving a bank form re-checks the account automatically. Update-mode imports do not check; use "Check" on the Accounts page.

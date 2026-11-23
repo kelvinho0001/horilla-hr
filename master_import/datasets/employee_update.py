@@ -423,7 +423,9 @@ class EmployeeUpdater:
         # ---- bank
         bank = getattr(emp, "employee_bank_details", None)
         given = {label: row[label] for label in BANK if row.get(label)}
-        if given:
+        if given and row.get("__bank_problem"):
+            errors["Bank Error"] = row["__bank_problem"]
+        elif given:
             if bank is None and not (
                 given.get("Bank Name") and given.get("Account Number")
             ):

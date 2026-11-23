@@ -44,6 +44,21 @@ from .salary_structure import (
 )
 from .scoping import managers_by_name, pick, pick_manager
 
+try:  # optional: the Demiller bank list + Paystack check (bank_export app)
+    from bank_export.master_hook import after_create as _bank_after_create
+    from bank_export.master_hook import bank_problem as _bank_problem
+    from bank_export.master_hook import enrich_row as _enrich_bank
+except ImportError:  # pragma: no cover
+    def _enrich_bank(row):
+        return row
+
+    def _bank_problem(row, seen):
+        return ""
+
+    def _bank_after_create(rows):
+        return {}
+
+
 BANK_KEYS = [
     "Bank Name",
     "Account Number",
@@ -402,6 +417,7 @@ class EmployeesDataset(Dataset):
                 "Bank Code 2",
             ):
                 row[key] = _text(row.get(key))
+            _enrich_bank(row)
             for key in ("Date Joining", "Contract End Date"):
                 value = row.get(key)
                 # A date cell read as text carries a midnight time with it.
@@ -476,7 +492,7 @@ class EmployeesDataset(Dataset):
         if not rows:
             return result
 
-        keys = ["__row"] + [f.key for f in self.fields]
+        keys = ["__row", "__bank_id", "__bank_problem"] + [f.key for f in self.fields]
         frame = pd.DataFrame(rows, columns=keys).astype(object)
         frame = frame.where(pd.notnull(frame), None)
 
@@ -495,11 +511,12 @@ class EmployeesDataset(Dataset):
 
         structures = structure_table()
         taken = set(HorillaUser.objects.values_list("username", flat=True))
+        bank_seen = set()
         valid = []
         for row in success:
             too_long = self._too_long(row)
             too_long.update(self._login_problems(row, taken))
-            problem = self._bank_problem(row)
+            problem = _bank_problem(row, bank_seen) or self._bank_problem(row)
             if row.get("Salary Structure"):
                 found, why = pick_structure(
                     row["Salary Structure"], row.get("Company"), structures
@@ -680,6 +697,7 @@ class EmployeesDataset(Dataset):
             banks_created = self._create_banks(rows)
             structures_set = self._apply_structures(rows)
             step(100)
+        bank_checks = _bank_after_create(rows)
 
         # A random password for everyone the sheet gave none, so nobody can
         # sign in until they are invited.
@@ -690,6 +708,7 @@ class EmployeesDataset(Dataset):
         ).start()
 
         return {
+            **bank_checks,
             "employees": len(employees),
             "banks": banks_created,
             "structures": structures_set,
