@@ -7,7 +7,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 
 from base.models import Department
-from employee.models import Employee
+from employee.models import Employee, EmployeeBankDetails
 from horilla.decorators import login_required, permission_required
 from weekly_payroll.models import PayrollRun
 
@@ -139,13 +139,16 @@ def accounts(request):
         if only_problems and not issues:
             continue
         name, code, raw_acct = services.record_text(e)
+        details = EmployeeBankDetails.objects.filter(employee_id=e).select_related("verification").first()
         rows.append({"employee": e, "bank": bank, "account": services.mask(acct), "issues": issues,
+                     "check": paystack.current_status(details), "has_account": bool(acct),
                      "record_bank": name or code, "has_record": bool(raw_acct or name or code)})
     page = Paginator(rows, 50).get_page(request.GET.get("page"))
     return render(request, T + "accounts.html", {
         "page": page, "q": q, "only_problems": only_problems, "dept": dept, "total": len(rows),
         "departments": Department.objects.all(),
         "can_edit": request.user.has_perm(P + "edit_bank_accounts"),
+        "paystack_ready": paystack.is_configured(),
         "problem_count": sum(1 for r in rows if r["issues"]),
     })
 
@@ -166,3 +169,71 @@ def account_edit(request, employee_id):
             messages.success(request, _("Bank account saved."))
             return redirect("bx-accounts")
     return render(request, T + "account_form.html", {"form": form, "emp": emp})
+
+
+# ------------------------------------------------------------ Paystack (Settings > General > Paystack)
+
+from . import paystack  # noqa: E402
+from .forms import PaystackForm  # noqa: E402
+from .models import PaystackSettings  # noqa: E402
+
+
+def _mask_key(key):
+    return (key[:7] + "…" + key[-4:]) if len(key) > 12 else ("•" * len(key))
+
+
+@login_required
+@permission_required(P + "change_paystacksettings")
+def paystack_settings(request):
+    row = PaystackSettings.objects.first()
+    form = PaystackForm(request.POST or None, initial={"is_enabled": row.is_enabled if row else True})
+    test = None
+    if request.method == "POST" and form.is_valid():
+        row = row or PaystackSettings()
+        new = form.cleaned_data["secret_key"].strip()
+        if form.cleaned_data.get("remove_key"):
+            row.secret_key = ""
+        elif new:
+            row.secret_key = new
+        row.is_enabled = form.cleaned_data["is_enabled"]
+        row.save()
+        messages.success(request, _("Paystack settings saved."))
+        if "test" in request.POST:
+            # 044 / 0000000000 is a well-formed lookup: "account not found" proves the key works; 401 means it does not.
+            res = paystack.resolve("0000000000", "044")
+            test = ("ok", _("The key is accepted by Paystack.")) if res.status != "error" else ("bad", res.message)
+        else:
+            return redirect("bx-paystack")
+    key = paystack.secret_key()
+    return render(request, T + "paystack_settings.html", {
+        "form": form, "configured": bool(key), "masked": _mask_key(key) if key else "", "test": test,
+        "from_env": bool(key) and not (row and row.secret_key),
+    })
+
+
+@login_required
+@permission_required(P + "edit_bank_accounts")
+@require_POST
+def verify_accounts(request):
+    """Check accounts with Paystack: one employee (employee_id) or every record not yet verified."""
+    if not paystack.is_configured():
+        messages.error(request, _("Paystack is not set up. Add the key in Settings > General > Paystack."))
+        return redirect(request.POST.get("next") or "bx-accounts")
+    qs = EmployeeBankDetails.objects.exclude(account_number__isnull=True).exclude(account_number="").select_related(
+        "employee_id", "verification"
+    )
+    eid = request.POST.get("employee_id")
+    if eid:
+        qs = qs.filter(employee_id=eid)
+    ok = bad = skipped = 0
+    for d in qs:
+        if not eid and paystack.current_status(d) and d.verification.status == "verified":
+            continue
+        if ok + bad >= 60:
+            skipped += 1
+            continue
+        res, _m = paystack.verify_details(d)
+        ok, bad = ok + (res.status == "verified"), bad + (res.status != "verified")
+    messages.success(request, _("%(ok)s verified, %(bad)s not verified.") % {"ok": ok, "bad": bad}
+                     + (_(" %(n)s left: run it again.") % {"n": skipped} if skipped else ""))
+    return redirect(request.POST.get("next") or "bx-accounts")

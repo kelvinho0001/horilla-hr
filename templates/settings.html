@@ -185,6 +185,15 @@
                                                         >{% trans "Outlook Mail" %}</a>
                                                     </div>
                                                 {% endif %}
+                                                {% if perms.bank_export.change_paystacksettings %}
+                                                    <div class="oh-input-group">
+                                                        <a
+                                                            id="paystackSettings"
+                                                            href="{% url 'bx-paystack' %}"
+                                                            class="oh-inner-sidebar__link oh-dropdown__link"
+                                                        >{% trans "Paystack" %}</a>
+                                                    </div>
+                                                {% endif %}
                                                 <div class="oh-input-group">
                                                     {% if perms.horilla_backup.view_googledrivebackup %}
                                                         <a

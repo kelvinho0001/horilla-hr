@@ -1,4 +1,4 @@
-{% load static i18n %}
+{% load static i18n bank_verification %}
 
 <div class="grid gap-4 lg:grid-cols-12">
     <!-- Personal Information -->
@@ -493,6 +493,7 @@
                                         {{ bank_details.any_other_code1|default:_("Not set") }}
                                     </dd>
                                 </div>
+                                {% bank_verification bank_details %}
                                 <div class="flex items-baseline justify-between gap-3 py-2">
                                     <dt class="text-sm font-medium text-color-600">{% trans "Country" %}</dt>
                                     <dd class="text-right text-sm {% if bank_details.country %}font-medium text-dark-500{% else %}italic text-dark-100{% endif %}">

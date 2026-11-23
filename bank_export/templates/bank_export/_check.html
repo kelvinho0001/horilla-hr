@@ -1,0 +1,4 @@
+{% load i18n %}{% if not v %}<span class="text-muted">{% trans "Not checked" %}</span>
+{% elif v.status == "verified" %}<span class="dm-dot dm-dot--{% if v.name_matches == False %}warning{% else %}success{% endif %}"></span> {{ v.account_name }}{% if v.name_matches == False %} <span class="text-warning">({% trans "name differs" %})</span>{% endif %}
+{% elif v.status == "failed" %}<span class="dm-dot dm-dot--danger"></span> <span class="text-danger">{% trans "Account not found" %}</span>
+{% else %}<span class="text-muted" title="{{ v.message }}">{% trans "Could not check" %}</span>{% endif %}

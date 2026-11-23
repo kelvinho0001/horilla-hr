@@ -1,0 +1,148 @@
+import io
+from unittest import mock
+
+import pandas as pd
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase
+from django.urls import reverse
+
+from bank_export import paystack
+from bank_export.models import AccountVerification, Bank, PaystackSettings
+from employee.models import Employee, EmployeeBankDetails
+
+from horilla.testkit import make_company, make_employee, make_user
+
+
+def admin():
+    u = make_user("root", is_superuser=True)
+    u.is_new_employee = False
+    u.save()
+    make_employee(company=make_company(), email="admin@x.test", user=u)
+    return u
+
+HEADERS = ["Badge ID", "First Name", "Last Name", "Phone", "Email", "Gender", "Department", "Job Position", "Job Role",
+           "Work Type", "Shift", "Employee Type", "Reporting Manager", "Company", "Location", "Date Joining",
+           "Contract End Date", "Basic Salary", "Salary Hour", "Bank Name", "Account Number", "Bank Code 1"]
+
+
+def reply(code=200, **body):
+    r = mock.Mock(status_code=code)
+    r.json.return_value = body
+    return r
+
+
+def paystack_ok(url, params=None, headers=None, timeout=None):
+    names = {"0123456789": "ADA OBI", "1111111111": "SOMEONE ELSE"}
+    n = names.get(params["account_number"])
+    if n:
+        return reply(200, status=True, data={"account_name": n})
+    return reply(422, status=False, message="Could not resolve account name. Check parameters or try again.")
+
+
+def row(badge, first, last, acct, code, email=None):
+    r = {h: None for h in HEADERS}
+    r.update({"Badge ID": badge, "First Name": first, "Last Name": last, "Phone": "08012345678",
+              "Email": email or f"{badge.lower()}@x.test", "Gender": "male", "Department": "Farm",
+              "Job Position": "Worker", "Job Role": "Worker", "Work Type": "Onsite", "Shift": "Day",
+              "Employee Type": "Contract", "Company": "Test Corp", "Date Joining": "2025-01-05", "Basic Salary": 30000,
+              "Account Number": acct, "Bank Code 1": code})
+    return r
+
+
+class PaystackImportTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        Bank.objects.create(code="044", name="Access Bank")
+        cls.su = admin()
+
+    def import_rows(self, rows):
+        buf = io.BytesIO()
+        pd.DataFrame(rows, columns=HEADERS).to_excel(buf, index=False)
+        self.client.force_login(self.su)
+        return self.client.post(
+            reverse("work-info-import"),
+            {"file": SimpleUploadedFile("e.xlsx", buf.getvalue())}, HTTP_HX_REQUEST="true",
+        )
+
+    def key(self, key="sk_test_abc"):
+        PaystackSettings.objects.create(secret_key=key)
+
+    @mock.patch("bank_export.paystack.requests.get", side_effect=paystack_ok)
+    def test_import_fills_bank_name_from_code_and_verifies(self, get):
+        self.key()
+        resp = self.import_rows([
+            row("T1", "Ada", "Obi", "0123456789", "044"),
+            row("T2", "Bola", "Eze", 1111111111, 44),          # Excel numbers: 44 -> 044
+            row("T3", "Chi", "Ude", "5555555555", "044"),       # Paystack cannot find it
+            row("T4", "Dayo", "Ola", "0123456780", "999"),      # code not in bank list
+            row("T5", "Efe", "Uko", "12345", "044"),            # not 10 digits
+        ])
+        self.assertEqual(resp.status_code, 200)
+        t1 = EmployeeBankDetails.objects.get(employee_id__badge_id="T1")
+        self.assertEqual((t1.bank_name, t1.any_other_code1, t1.branch, t1.account_number),
+                         ("Access Bank", "044", "Lagos", "0123456789"))
+        v = t1.verification
+        self.assertEqual((v.status, v.account_name, v.name_matches), ("verified", "ADA OBI", True))
+        t2 = EmployeeBankDetails.objects.get(employee_id__badge_id="T2")
+        self.assertEqual(t2.any_other_code1, "044")
+        self.assertFalse(t2.verification.name_matches)         # SOMEONE ELSE vs Bola Eze
+        self.assertEqual(EmployeeBankDetails.objects.get(employee_id__badge_id="T3").verification.status, "failed")
+        for badge in ("T4", "T5"):                              # employee still created, bank not saved
+            self.assertTrue(Employee.objects.filter(badge_id=badge).exists())
+            self.assertFalse(EmployeeBankDetails.objects.filter(employee_id__badge_id=badge).exclude(account_number__in=[None, ""]).exists())
+        text = resp.content.decode()
+        self.assertIn("T4", text)
+        self.assertIn("not in the bank list", text)
+        self.assertIn("T3", text)
+        self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer sk_test_abc")
+
+    @mock.patch("bank_export.paystack.requests.get", side_effect=paystack_ok)
+    def test_without_a_key_bank_is_saved_but_not_checked(self, get):
+        resp = self.import_rows([row("T1", "Ada", "Obi", "0123456789", "044")])
+        d = EmployeeBankDetails.objects.get(employee_id__badge_id="T1")
+        self.assertEqual(d.bank_name, "Access Bank")
+        self.assertFalse(AccountVerification.objects.exists())
+        get.assert_not_called()
+        self.assertEqual(resp.status_code, 200)
+
+    @mock.patch("bank_export.paystack.requests.get", side_effect=paystack_ok)
+    def test_changed_account_voids_the_old_check(self, get):
+        self.key()
+        self.import_rows([row("T1", "Ada", "Obi", "0123456789", "044")])
+        d = EmployeeBankDetails.objects.get(employee_id__badge_id="T1")
+        self.assertIsNotNone(paystack.current_status(d))
+        d.account_number = "1111111111"
+        d.save()
+        d = EmployeeBankDetails.objects.get(pk=d.pk)
+        self.assertIsNone(paystack.current_status(d))
+
+    def test_bad_key_or_outage_is_not_blamed_on_the_account(self):
+        with mock.patch("bank_export.paystack.requests.get", return_value=reply(401, status=False, message="Invalid key")):
+            res = paystack.resolve("0123456789", "044", key="sk_test_x")
+        self.assertEqual(res.status, "error")
+
+
+class PaystackSettingsPageTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.su = admin()
+
+    def test_key_is_saved_masked_and_kept_when_left_blank(self):
+        self.client.force_login(self.su)
+        url = reverse("bx-paystack")
+        self.client.post(url, {"secret_key": "sk_live_abcdefghijklmnop", "is_enabled": "on"})
+        self.assertEqual(PaystackSettings.objects.get().secret_key, "sk_live_abcdefghijklmnop")
+        page = self.client.get(url).content.decode()
+        self.assertNotIn("abcdefghijklmnop", page)
+        self.client.post(url, {"secret_key": "", "is_enabled": "on"})
+        self.assertEqual(PaystackSettings.objects.get().secret_key, "sk_live_abcdefghijklmnop")
+        r = self.client.post(url, {"secret_key": "not-a-key", "is_enabled": "on"})
+        self.assertContains(r, "not a Paystack secret key")
+
+    def test_page_needs_the_permission(self):
+        u = make_user("plain")
+        u.is_new_employee = False
+        u.save()
+        make_employee(company=make_company("Other"), email="plain@x.test", user=u)
+        self.client.force_login(u)
+        self.assertNotEqual(self.client.get(reverse("bx-paystack")).status_code, 200)

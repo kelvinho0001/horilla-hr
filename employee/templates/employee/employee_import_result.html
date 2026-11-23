@@ -41,6 +41,15 @@
         </div>
     </div>
 
+    {% if bank_report %}
+        <div class="mt-5 rounded-lg border border-gray-200 bg-gray-50 p-3 text-left text-xs text-gray-700">
+            <div class="font-semibold text-gray-800">{% trans "Bank details" %}</div>
+            <div>{{ bank_report.saved }} {% trans "saved" %}, {{ bank_report.verified }} {% trans "verified with Paystack" %}{% if bank_report.unchecked %}, {{ bank_report.unchecked }} {% trans "not checked yet (Bank Payments > Accounts)" %}{% endif %}</div>
+            {% for badge, msg in bank_report.problems %}<div class="text-red-600">{{ badge }}: {{ msg }}</div>{% endfor %}
+            {% for badge, msg in bank_report.name_warnings %}<div class="text-amber-600">{{ badge }}: {{ msg }}</div>{% endfor %}
+        </div>
+    {% endif %}
+
     <div class="mt-6 flex items-center justify-between gap-2 border-t border-gray-200 pt-4">
         {% if path_info %}
             <a

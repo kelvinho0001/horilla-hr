@@ -114,3 +114,44 @@ class ExportBatch(models.Model):
 
     def __str__(self):
         return self.reference
+
+
+class PaystackSettings(models.Model):
+    """One row. The Paystack secret key lives here (Settings > General > Paystack), never in the code."""
+
+    secret_key = models.CharField(max_length=200, blank=True)
+    is_enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Paystack settings"
+        verbose_name_plural = "Paystack settings"
+
+    @classmethod
+    def get(cls):
+        return cls.objects.first() or cls()
+
+    def __str__(self):
+        return "Paystack settings"
+
+
+class AccountVerification(models.Model):
+    """Result of asking Paystack 'who owns this account number at this bank?' for an employee's bank record."""
+
+    VERIFIED, FAILED, ERROR = "verified", "failed", "error"
+    STATUS = [(VERIFIED, _("Verified")), (FAILED, _("Not found")), (ERROR, _("Could not check"))]
+
+    details = models.OneToOneField(
+        "employee.EmployeeBankDetails", on_delete=models.CASCADE, related_name="verification"
+    )
+    status = models.CharField(max_length=10, choices=STATUS, db_index=True)
+    # The exact values that were checked. If the employee record later differs, the result no longer counts.
+    account_number = models.CharField(max_length=50)
+    bank_code = models.CharField(max_length=20)
+    account_name = models.CharField(max_length=200, blank=True)
+    name_matches = models.BooleanField(null=True)
+    message = models.CharField(max_length=300, blank=True)
+    checked_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.details} {self.status}"

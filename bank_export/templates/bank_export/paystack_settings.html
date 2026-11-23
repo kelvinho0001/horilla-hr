@@ -1,0 +1,25 @@
+{% extends 'settings.html' %}
+{% load i18n %}
+{% block settings %}
+<div class="mb-4"><h4 class="text-base font-semibold text-[#333]">{% trans "Paystack" %}</h4>
+<p class="text-sm text-gray-500">{% trans "Used to confirm that each employee's account number belongs to the bank in their record. Nothing is paid through Paystack." %}</p></div>
+<div style="max-width:640px" class="bg-white p-3 rounded-md shadow-card">
+  <p class="mb-3">
+    {% if configured %}<span class="oh-badge oh-badge--success">{% trans "Key saved" %}</span> <code>{{ masked }}</code>{% if from_env %} <small>({% trans "from the server environment" %})</small>{% endif %}
+    {% else %}<span class="oh-badge oh-badge--warning">{% trans "No key yet" %}</span>{% endif %}
+  </p>
+  {% if test %}<div class="mb-3 {% if test.0 == 'ok' %}text-success{% else %}text-danger{% endif %}">{{ test.1 }}</div>{% endif %}
+  <form method="post">{% csrf_token %}
+    {% for f in form %}<div class="oh-input-group mb-3">
+      {% if f.field.widget.input_type == 'checkbox' %}<label class="oh-label">{{ f }} {{ f.label }}</label>
+      {% else %}<label class="oh-label" for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% endif %}
+      {% if f.help_text %}<small class="text-muted">{{ f.help_text }}</small>{% endif %}
+      {% for e in f.errors %}<div class="text-danger">{{ e }}</div>{% endfor %}
+    </div>{% endfor %}
+    <div class="d-flex flex-row-reverse gap-2">
+      <button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button>
+      <button name="test" value="1" class="oh-btn oh-btn--light">{% trans "Save and test the key" %}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

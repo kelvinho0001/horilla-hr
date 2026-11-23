@@ -12,4 +12,6 @@ urlpatterns = [
     path("banks/", v.banks, name="bx-banks"),
     path("accounts/", v.accounts, name="bx-accounts"),
     path("accounts/<int:employee_id>/", v.account_edit, name="bx-account-edit"),
+    path("verify/", v.verify_accounts, name="bx-verify"),
+    path("settings/paystack/", v.paystack_settings, name="bx-paystack"),
 ]

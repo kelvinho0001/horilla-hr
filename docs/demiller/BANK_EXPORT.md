@@ -38,3 +38,15 @@ file can be generated; the old file stays in history. **Paid** is final. Exporte
 ## Roles
 Accountant: bank list, generate, download, mark paid, view masked accounts. HR Officer: edit worker bank accounts.
 HR/Payroll Approver: supersede. Management: view exports. Only the app creates files; nothing is sent to a bank.
+
+## Bank details in the employee import + Paystack account check
+
+**Employees > Action > Import** now reads the optional columns **Bank Code 1** and **Account Number** (and, if you have them, **Bank Name** / **Bank Branch**):
+
+- The bank name is filled from the bank list using the code; Branch defaults to Lagos.
+- Account numbers must be 10 digits and unique. Excel often drops a leading 0 (`044` -> `44`, a 10-digit number -> 9 digits): the importer restores up to two lost zeros, but format both columns as **Text** to be safe.
+- If a Paystack key is saved, each account is checked ("who owns this account?") and the result shows on the employee record (Bank card > Account check). A name that does not match the employee is flagged, not rejected.
+- A bad bank row never blocks the employee: the employee is created and the problem is listed in the import result.
+- At most 40 accounts are checked per import. Check the rest from **Bank Payments > Accounts** ("Check all unverified accounts"). Changing an account number or bank code on a record voids its earlier check.
+
+**Setup:** Settings > General > **Paystack**: paste the secret key (`sk_live_...` / `sk_test_...`), then "Save and test the key". Fallback: `PAYSTACK_SECRET_KEY` environment variable. Run `python manage.py migrate` after pulling. Needs outbound HTTPS to `api.paystack.co`.

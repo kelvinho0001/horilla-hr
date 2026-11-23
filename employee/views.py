@@ -3198,6 +3198,7 @@ def work_info_import(request):
             success_list, error_list, created_count = process_employee_records(
                 cleaned_data_frame, get_session_company(request)
             )
+            bank_report = None
             if success_list:
                 try:
                     users = bulk_create_user_import(success_list)
@@ -3213,6 +3214,13 @@ def work_info_import(request):
                         target=set_initial_password, args=(employees,)
                     )
                     thread.start()
+                    if "bank_export" in settings.INSTALLED_APPS:
+                        from bank_export.import_hook import apply as import_bank_details
+
+                        try:
+                            bank_report = import_bank_details(success_list)
+                        except Exception as e:  # bank columns must never undo an employee import
+                            logger.error(e)
 
                 except Exception as e:
                     messages.error(request, _("Error Occurred {}").format(e))
@@ -3232,6 +3240,7 @@ def work_info_import(request):
                 "error_count": len(error_list),
                 "model": _("Employees"),
                 "path_info": path_info,
+                "bank_report": bank_report,
             }
             messages.success(
                 request,
