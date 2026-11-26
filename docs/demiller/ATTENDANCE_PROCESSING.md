@@ -45,3 +45,22 @@ red = needs attention. Totals and filters (dates or months, department, worker c
 The separate daily-attendance table, weekly approval/lock, reopen and correction audit were removed in favour of Horilla's own validation.
 The raw punches are untouched. If you had already approved attendance in the old screens, run **Add punches to Attendances** again for that range
 and validate in Horilla.
+
+## Night shifts: which day does a punch count for?
+
+A punch normally counts for the **calendar date it was made on**. A night shift that starts in the evening and is marked the next morning would then land on the wrong day, so a window may **run overnight**.
+
+Example for Groundnut Selecting (Attendance rules > window rows):
+
+| Window | Meaning |
+|---|---|
+| `12:00 – 18:00` | Day shift. A 4pm mark on the 25th counts for the 25th. |
+| `19:00 – 09:00` | Night shift (ends next morning). A 7pm mark on the 25th **and** a 4am mark on the 26th both count for the **25th**, as one day. |
+
+- An overnight window is one whose end time is earlier than its start time. The rules page shows it as "(ends next morning)".
+- A night worker's 7pm and 4am marks are one shift, not "two shifts in one day".
+- Windows must not overlap, including across midnight (the form refuses `19:00-09:00` together with `05:00-10:00`).
+- Keep the windows free of gaps that matter: a punch outside every window is flagged "needs attention", not counted.
+- Old `00:00 – 09:00` windows still mean the calendar day. Change them to `19:00 – 09:00` for night-shift rules.
+
+**Period ends.** A night shift that starts on the last day of a period finishes the next morning, so download the device data **one day past the period end** (for a period ending on the 26th, download through the 27th). That morning's punches count for the 26th and the 27th's own day shift is left for the next period.

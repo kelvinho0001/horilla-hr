@@ -79,6 +79,21 @@ class CalculatorTests(TestCase):
         self.assertEqual(calculators.classify([])[0], None)
 
 
+class OvernightCalculatorTests(TestCase):
+    NIGHT = [(time(19), time(9))]
+
+    def test_after_midnight_punch_belongs_to_the_day_the_shift_started(self):
+        self.assertEqual(calculators.attendance_day(at(date(2024, 11, 26), 4), self.NIGHT), date(2024, 11, 25))
+        self.assertEqual(calculators.attendance_day(at(date(2024, 11, 25), 19, 5), self.NIGHT), date(2024, 11, 25))
+        self.assertEqual(calculators.attendance_day(at(date(2024, 11, 26), 16), self.NIGHT), date(2024, 11, 26))
+        self.assertEqual(calculators.attendance_day(at(date(2024, 11, 26), 4), []), date(2024, 11, 26))
+
+    def test_evening_and_morning_punches_of_one_night_are_one_shift_not_two(self):
+        status, flags = calculators.classify([time(4, 5), time(19, 10)], self.NIGHT)
+        self.assertEqual((status, flags), (calculators.OK, ["multiple_punches"]))
+        self.assertEqual(calculators.classify([time(13)], self.NIGHT)[0], calculators.ATTENTION)
+
+
 class ProcessingTests(Base):
     def run_day(self, e, d=MON, e2=None):
         return services.process_range(d, d, [e])
@@ -167,6 +182,29 @@ class ProcessingTests(Base):
         self.assertIsNone(self.att(between, MON))
         self.assertIsNone(self.att(both, MON))
         self.assertEqual({e.pk for e, _d, _i in stats["attention"]}, {between.pk, both.pk})
+
+    def test_morning_and_night_shift_each_count_for_the_day_they_start(self):
+        D = date(2024, 11, 25)
+        r = self.window_rule()
+        r.windows.create(start=time(12), end=time(18))      # day shift: marks about 4pm
+        r.windows.create(start=time(19), end=time(9))       # night shift: resumes 7pm, marks about 4am next day
+        day_w, night, night_in_out = self.emp(), self.emp(), self.emp()
+        self.punch(day_w, at(D, 16))
+        self.punch(night, at(D + timedelta(days=1), 4))     # only the 4am mark, on the 26th
+        self.punch(night_in_out, at(D, 19, 10))
+        self.punch(night_in_out, at(D + timedelta(days=1), 4, 5))
+        stats = services.process_range(D, D + timedelta(days=1), [day_w, night, night_in_out])
+        self.assertEqual(stats["created"], 3)
+        self.assertIsNotNone(self.att(day_w, D))
+        self.assertIsNone(self.att(day_w, D + timedelta(days=1)))
+        self.assertIsNotNone(self.att(night, D))             # the 4am punch is the 25th's attendance
+        self.assertIsNone(self.att(night, D + timedelta(days=1)))
+        self.assertIsNotNone(self.att(night_in_out, D))      # evening + morning = one day, not two
+        self.assertIsNone(self.att(night_in_out, D + timedelta(days=1)))
+        self.assertEqual(stats["attention"], [])
+        # a period ending on the 25th does not take the 26th's 4am mark; the next period begins from the 26th
+        again = services.classify_range([night], D, D)
+        self.assertIn((night.pk, D), again)
 
     def test_accept_day_adds_a_flagged_day_once(self):
         r = self.window_rule()
@@ -262,6 +300,11 @@ class RoleAndViewTests(Base):
         rule = AttendanceRule.objects.get()
         self.assertEqual([(str(a), str(b)) for a, b in rule.window_list()], [("00:00:00", "09:00:00"), ("14:00:00", "20:00:00")])
         self.assertContains(self.client.get(reverse("att-proc-rules")), "14:00–20:00")
+        night = {**base, "name": "night", "windows-0-start": "19:00", "windows-0-end": "09:00", "windows-1-start": "12:00", "windows-1-end": "18:00"}
+        self.assertEqual(self.client.post(reverse("att-proc-rule-new"), night).status_code, 302)
+        clash = {**base, "name": "bad night", "windows-0-start": "19:00", "windows-0-end": "09:00", "windows-1-start": "05:00", "windows-1-end": "10:00"}
+        self.assertEqual(self.client.post(reverse("att-proc-rule-new"), clash).status_code, 200)
+        self.assertContains(self.client.get(reverse("att-proc-rules")), "ends next morning")
         self.assertEqual(self.client.get(reverse("att-proc-rule-edit", args=[rule.pk])).status_code, 200)
 
     def test_officer_cannot_edit_rules(self):

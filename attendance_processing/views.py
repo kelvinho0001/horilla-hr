@@ -156,10 +156,12 @@ def day_detail(request, employee_id, day):
     emp = get_object_or_404(Employee, pk=employee_id)
     d = _parse_date(day) or services.today()
     tz = services.attendance_tz()
-    punches = [
-        t for t in RawTransaction.objects.filter(employee=emp).order_by("attendance_timestamp")
-        if t.attendance_timestamp.astimezone(tz).date() == d
-    ]
+    rule = services.RuleResolver().for_employee(emp)
+    wins = rule.window_list() if rule else []
+    near = RawTransaction.objects.filter(
+        employee=emp, attendance_timestamp__date__range=(d - timedelta(days=1), d + timedelta(days=1))
+    ).order_by("attendance_timestamp")
+    punches = [t for t in near if calculators.attendance_day(t.attendance_timestamp.astimezone(tz), wins) == d]
     info = services.classify_range([emp], d, d).get((emp.pk, d))
     return render(request, T + "day_detail.html", {
         "emp": emp, "day": d, "punches": punches, "tz": tz, "info": info,

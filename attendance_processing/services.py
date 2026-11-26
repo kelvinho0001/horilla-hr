@@ -91,7 +91,7 @@ def _check_range(start, end):
 def classify_range(employees, start, end):
     """
     {(employee_id, date): DayInfo} for every day that has punches, using the attendance rules.
-    The day is the calendar date (Africa/Lagos) of the punch. Days before joining or after the
+    The day is the calendar date (Africa/Lagos) of the punch, except that after-midnight punches in an overnight window belong to the day the shift started. Days before joining or after the
     contract end are ignored. Nothing is written.
     """
     _check_range(start, end)
@@ -103,15 +103,20 @@ def classify_range(employees, start, end):
     tz = attendance_tz()
     lo = datetime.combine(start, time.min, tzinfo=tz) - timedelta(days=1)
     hi = datetime.combine(end, time.max, tzinfo=tz) + timedelta(days=1)
+    rules = RuleResolver()
+    by_id = {e.pk: e for e in employees}
+    windows = {}
+    for e in employees:
+        rule = rules.for_employee(e)
+        windows[e.pk] = (rule, rule.window_list() if rule else [])
     punches = defaultdict(list)
     for t in RawTransaction.objects.filter(
         employee__in=employees, attendance_timestamp__range=(lo, hi)
     ).only("employee_id", "attendance_timestamp", "source_timezone"):
         local = t.attendance_timestamp.astimezone(ZoneInfo(t.source_timezone) if t.source_timezone else tz)
-        if start <= local.date() <= end:
-            punches[(t.employee_id, local.date())].append(local)
-    rules = RuleResolver()
-    by_id = {e.pk: e for e in employees}
+        day = calculators.attendance_day(local, windows[t.employee_id][1])
+        if start <= day <= end:
+            punches[(t.employee_id, day)].append(local)
     for (emp_id, day), items in punches.items():
         emp = by_id[emp_id]
         wi = getattr(emp, "employee_work_info", None)
@@ -119,8 +124,7 @@ def classify_range(employees, start, end):
         if (joined and day < joined) or (left and day > left):
             continue
         items.sort()
-        rule = rules.for_employee(emp)
-        status, flags = calculators.classify([p.time() for p in items], rule.window_list() if rule else [])
+        status, flags = calculators.classify([p.time() for p in items], windows[emp_id][1])
         result[(emp_id, day)] = DayInfo(status, flags, len(items), items[0], items[-1])
     return result
 

@@ -6,7 +6,7 @@
   <div class="dm-form-card mb-3">{% include "demiller/_form_fields.html" with cols=6 %}</div>
   <div class="dm-form-card mb-3">
     <h5 class="fw-bold">{% trans "Attendance windows" %}</h5>
-    <p class="text-muted">{% trans "A punch counts only when its time falls inside one of these windows (e.g. 00:00–09:00 and 14:00–20:00). Leave all empty to accept any time. Punches in two different windows on one day are flagged. A window cannot cross midnight: use two." %}</p>
+    <p class="text-muted">{% trans "A punch counts only when its time falls inside one of these windows (e.g. 00:00–09:00 and 14:00–20:00). Leave all empty to accept any time. Punches in two different windows on one day are flagged. A night shift can run overnight, e.g. 19:00–09:00: punches after midnight (up to 09:00) count for the day the shift STARTED, so a 04:00 punch on the 26th is the 25th's attendance." %}</p>
     <div style="height:.5rem"></div>{{ formset.management_form }}{{ formset.non_form_errors }}
     {% for f in formset %}
     <div class="row align-items-end mb-2">{{ f.id }}

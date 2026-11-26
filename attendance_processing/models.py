@@ -82,8 +82,12 @@ class AttendanceRuleWindow(models.Model):
         ordering = ["start", "id"]
 
     def clean(self):
-        if self.start and self.end and self.start >= self.end:
-            raise ValidationError(_("A window must start before it ends (it cannot cross midnight; use two windows)."))
+        if self.start and self.end and self.start == self.end:
+            raise ValidationError(_("A window cannot start and end at the same time."))
+
+    @property
+    def is_overnight(self):
+        return self.start > self.end
 
     def __str__(self):
         return f"{self.start:%H:%M}-{self.end:%H:%M}"
