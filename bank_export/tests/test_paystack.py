@@ -258,3 +258,50 @@ class LookupAndKeyTests(TestCase):
         from payroll.sidebar import PayrollSettings
 
         self.assertIn("Paystack", [str(i["label"]) for i in PayrollSettings.items])
+
+
+class TemplateDropdownTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.su = admin()
+
+    def download(self):
+        self.client.force_login(self.su)
+        r = self.client.get(reverse("master-import-template", args=["employees"]))
+        self.assertEqual(r.status_code, 200)
+        import openpyxl
+
+        return openpyxl.load_workbook(io.BytesIO(r.content))
+
+    def test_template_is_unchanged_without_a_bank_list(self):
+        wb = self.download()
+        self.assertEqual(wb.sheetnames, ["Sheet1"])
+        self.assertEqual(len(wb["Sheet1"].data_validations.dataValidation), 0)
+
+    def test_template_gets_a_bank_dropdown_and_automatic_code_with_the_same_columns(self):
+        plain = [c.value for c in self.download()["Sheet1"][1]]
+        Bank.objects.create(code="044", name="Access Bank")
+        Bank.objects.create(code="058", name="Guaranty Trust Bank")
+        Bank.objects.create(code="999", name="Closed", is_active=False)
+        wb = self.download()
+        ws = wb["Sheet1"]
+        self.assertEqual([c.value for c in ws[1]], plain)                 # same columns, same order
+        self.assertEqual(wb.sheetnames, ["Sheet1", "Bank list"])          # the import reads the first sheet
+        self.assertEqual(wb["Bank list"].sheet_state, "hidden")
+        self.assertEqual([r[0].value for r in wb["Bank list"].iter_rows(min_row=2)], ["Access Bank", "Guaranty Trust Bank"])
+        col = {c.value: c.column_letter for c in ws[1]}
+        dv = ws.data_validations.dataValidation[0]
+        self.assertIn(f"{col['Bank Name']}2:{col['Bank Name']}3001", str(dv.sqref))
+        self.assertIn("'Bank list'!$A$2:$A$3", dv.formula1)
+        self.assertIn("VLOOKUP", ws[f"{col['Bank Code 1']}5"].value)
+        self.assertEqual(ws[f"{col['Bank Name']}2"].value, "Access Bank")
+
+    def test_pasted_names_are_matched_tolerantly_on_import(self):
+        from bank_export.master_hook import enrich_row
+
+        Bank.objects.create(code="058", name="Guaranty Trust Bank")
+        for typed in ("guaranty trust bank", "GUARANTY TRUST BANK PLC", "Guaranty  Trust"):
+            r = enrich_row({"Bank Name": typed, "Account Number": "0123456789", "Badge ID": "X"})
+            self.assertEqual((r["Bank Code 1"], r["Bank Name"]), ("058", "Guaranty Trust Bank"), typed)
+        bad = enrich_row({"Bank Name": "Nowhere Bank", "Account Number": "0123456789", "Badge ID": "X"})
+        self.assertIn("not in the bank list", bad["__bank_problem"])

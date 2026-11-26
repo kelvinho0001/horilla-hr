@@ -43,6 +43,9 @@ def enrich_row(row):
             row["__bank_problem"] = f"Bank code '{code}' is not in the bank list."
     elif name:
         bank = Bank.objects.filter(name__iexact=name).first()
+        if bank is None:  # tolerate case, spacing, punctuation and "&" / "and" differences
+            same = [b for b in Bank.objects.all() if services._norm(b.name) == services._norm(name)]
+            bank = same[0] if len(same) == 1 else None
         if bank is None:
             row["__bank_problem"] = f"Bank '{name}' is not in the bank list; use its Bank Code 1."
     if bank is not None:

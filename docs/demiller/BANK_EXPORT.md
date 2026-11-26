@@ -73,3 +73,17 @@ Saving a bank form re-checks the account automatically. Update-mode imports do n
 ### Account Name while typing
 
 On the employee's bank form (and Bank Payments > Accounts > Edit), the read-only **Account Name** box fills itself as soon as a 10-digit account number and a bank are entered, before saving, so the person can see whose account it is and correct a typo. Nothing is saved by the lookup. Saving the form still records the result on the employee.
+
+## Bulk employee import with banks (no typing of bank codes)
+
+1. Load the bank list once: **Bank Payments > Bank list** (CSV with CODE and NAME). This is where every bank name and code in the system comes from.
+2. **Employees > Import > Download template.** When the bank list is loaded the template has:
+   - **Bank Name** as a dropdown of the list (Excel 365 / 2021+ also suggests banks as you type the first letters; older Excel shows the arrow; Google Sheets and LibreOffice show the dropdown),
+   - **Bank Code 1** that fills itself from the chosen bank,
+   - **Account Number** formatted as text (keeps a leading 0),
+   - the bank list on a hidden second sheet (the import reads the first sheet only).
+   All the other columns are exactly as before. Download the template again whenever the bank list changes.
+3. HR picks a bank per row, or pastes the bank-name column from their own records. Excel does not check pasted cells, so the import also matches names tolerantly (case, spacing, "Plc", punctuation). A name it cannot match is reported on that row.
+4. Upload as usual. Only Bank Name + Account Number are needed; the code is filled from the list.
+
+Tip for 2,000 employees: paste the names and account numbers in, then filter the Bank Name column for blanks / unusual entries and fix those from the dropdown.

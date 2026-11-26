@@ -163,10 +163,19 @@ def template_download(request, dataset):
     frame = pd.DataFrame(
         [{f.key: f.sample for f in spec.fields}], columns=[f.key for f in spec.fields]
     )
-    return _xlsx_response(frame, f"{spec.key}_template.xlsx")
+    return _xlsx_response(frame, f"{spec.key}_template.xlsx", decorate=_bank_dropdown if spec.key == "employees" else None)
 
 
-def _xlsx_bytes(frame):
+def _bank_dropdown(book, sheet, columns):
+    """Employees template: Bank Name dropdown + automatic Bank Code (only when the bank list is loaded)."""
+    try:
+        from bank_export.template_hook import decorate
+    except ImportError:  # pragma: no cover
+        return
+    decorate(book, sheet, columns)
+
+
+def _xlsx_bytes(frame, decorate=None):
     """A sheet people can work in: a frozen yellow header, borders, readable widths."""
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
@@ -196,12 +205,14 @@ def _xlsx_bytes(frame):
                 max(longest + 4, 14), 50
             )
         sheet.freeze_panes = "A2"
+        if decorate:
+            decorate(writer.book, sheet, list(frame.columns))
     return buffer.getvalue()
 
 
-def _xlsx_response(frame, filename):
+def _xlsx_response(frame, filename, decorate=None):
     response = HttpResponse(
-        _xlsx_bytes(frame),
+        _xlsx_bytes(frame, decorate),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
