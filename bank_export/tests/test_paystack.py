@@ -208,3 +208,53 @@ class MasterImportBankTests(TestCase):
         f = EmployeeBankDetailsUpdateForm(instance=d)
         self.assertTrue(f.fields["account_name"].disabled)
         self.assertIn("ADA OBI", str(f["account_name"]))
+
+
+class LookupAndKeyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.bank = Bank.objects.create(code="044", name="Access Bank")
+        cls.su = admin()
+
+    def get(self, **q):
+        self.client.force_login(self.su)
+        return self.client.get(reverse("bx-lookup"), q)
+
+    def test_environment_variable_key_is_used_and_a_saved_key_wins(self):
+        with mock.patch.dict("os.environ", {"PAYSTACK_SECRET_KEY": "sk_test_env"}):
+            self.assertEqual(paystack.secret_key(), "sk_test_env")
+            PaystackSettings.objects.create(secret_key="sk_test_saved")
+            self.assertEqual(paystack.secret_key(), "sk_test_saved")
+            PaystackSettings.objects.update(is_enabled=False)
+            self.assertEqual(paystack.secret_key(), "")
+
+    @mock.patch("bank_export.paystack.requests.get", side_effect=paystack_ok)
+    def test_lookup_returns_the_account_name_before_anything_is_saved(self, get):
+        with mock.patch.dict("os.environ", {"PAYSTACK_SECRET_KEY": "sk_test_env"}):
+            r = self.get(account_number="0123456789", bank_code="044").json()
+            self.assertEqual((r["status"], r["account_name"]), ("verified", "ADA OBI"))
+            by_id = self.get(account_number="0123456789", bank_id=self.bank.pk).json()
+            self.assertEqual(by_id["account_name"], "ADA OBI")
+            bad = self.get(account_number="5555555555", bank_code="044").json()
+            self.assertEqual(bad["status"], "failed")
+            short = self.get(account_number="123", bank_code="044").json()
+            self.assertEqual(short["status"], "idle")
+        self.assertFalse(AccountVerification.objects.exists())     # a lookup saves nothing
+
+    def test_lookup_needs_permission_and_a_key(self):
+        u = make_user("plain2")
+        u.is_new_employee = False
+        u.save()
+        make_employee(company=make_company("Other2"), email="p2@x.test", user=u)
+        self.client.force_login(u)
+        self.assertEqual(self.client.get(reverse("bx-lookup"), {"account_number": "0123456789", "bank_code": "044"}).status_code, 403)
+        with mock.patch.dict("os.environ", {}, clear=False):
+            import os
+            os.environ.pop("PAYSTACK_SECRET_KEY", None)
+            r = self.get(account_number="0123456789", bank_code="044").json()
+        self.assertIn("not set up", r["message"])
+
+    def test_paystack_is_listed_under_settings_payroll(self):
+        from payroll.sidebar import PayrollSettings
+
+        self.assertIn("Paystack", [str(i["label"]) for i in PayrollSettings.items])

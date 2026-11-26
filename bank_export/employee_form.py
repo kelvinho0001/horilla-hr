@@ -38,6 +38,44 @@ class BankSelect(forms.Select):
         return option
 
 
+LOOKUP_JS = """
+<script>
+(function(){
+  var out=document.getElementById('id_account_name'); if(!out||out.dataset.wired){return;} out.dataset.wired='1';
+  var acct=document.getElementById('id_account_number'), bank=document.getElementById('id_bank_name'),
+      code=document.getElementById('id_any_other_code1'), timer=null, last='';
+  function run(){
+    var a=(acct&&acct.value||'').trim(), c=(code&&code.value||'').trim(), b=(bank&&bank.value||'').trim();
+    if(!/^[0-9]{10}$/.test(a)||(!c&&!b)){ out.value=''; last=''; return; }
+    var key=a+'|'+c+'|'+b; if(key===last){return;} last=key; out.value='Checking...';
+    var q='account_number='+encodeURIComponent(a)+'&bank_code='+encodeURIComponent(c)+'&bank_name='+encodeURIComponent(b)
+          +'&employee='+encodeURIComponent(out.dataset.employee||'');
+    fetch(%(url)r+'?'+q,{credentials:'same-origin',headers:{'X-Requested-With':'XMLHttpRequest'}})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(d.status==='verified'){ out.value=d.account_name+(d.name_matches===false?'  (differs from the employee name)':''); }
+        else{ out.value=d.message||'Could not check'; }
+      }).catch(function(){ out.value='Could not check'; });
+  }
+  function later(){ clearTimeout(timer); timer=setTimeout(run,400); }
+  [acct,code].forEach(function(el){ if(el){ el.addEventListener('input',later); el.addEventListener('change',later); } });
+  if(bank){ bank.addEventListener('change',function(){ setTimeout(run,80); }); }
+})();
+</script>
+"""
+
+
+class AccountNameInput(forms.TextInput):
+    """Read-only box that fills itself with the account name as soon as account number + bank are entered."""
+
+    def render(self, name, value, attrs=None, renderer=None):
+        from django.urls import reverse
+        from django.utils.safestring import mark_safe
+
+        html = super().render(name, value, attrs, renderer)
+        return mark_safe(str(html) + LOOKUP_JS % {"url": reverse("bx-lookup")})
+
+
 def add_account_name(form):
     """Read-only 'Account Name': what Paystack says the account is called (blank until it has been checked)."""
     from . import paystack
@@ -52,8 +90,11 @@ def add_account_name(form):
         text = ""
     form.fields["account_name"] = forms.CharField(
         label=_("Account Name"), required=False, disabled=True, initial=text,
-        widget=forms.TextInput(attrs={"readonly": "readonly", "placeholder": _("Filled in automatically after saving")}),
-        help_text=_("Read only: the name the bank holds for this account number."),
+        widget=AccountNameInput(attrs={
+            "readonly": "readonly", "placeholder": _("Appears once the account number and bank are entered"),
+            "data-employee": str(getattr(getattr(form.instance, "employee_id", None), "pk", "") or ""),
+        }),
+        help_text=_("Read only: looked up from the bank as you type, so you can check it before saving."),
     )
 
 

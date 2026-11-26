@@ -174,7 +174,7 @@ def account_edit(request, employee_id):
     })
 
 
-# ------------------------------------------------------------ Paystack (Settings > General > Paystack)
+# ------------------------------------------------------------ Paystack (Settings > Payroll > Paystack)
 
 from . import paystack  # noqa: E402
 from .forms import PaystackForm  # noqa: E402
@@ -220,7 +220,7 @@ def paystack_settings(request):
 def verify_accounts(request):
     """Check accounts with Paystack: one employee (employee_id) or every record not yet verified."""
     if not paystack.is_configured():
-        messages.error(request, _("Paystack is not set up. Add the key in Settings > General > Paystack."))
+        messages.error(request, _("Paystack is not set up. Add the key in Settings > Payroll > Paystack."))
         return redirect(request.POST.get("next") or "bx-accounts")
     qs = EmployeeBankDetails.objects.exclude(account_number__isnull=True).exclude(account_number="").select_related(
         "employee_id", "verification"
@@ -240,3 +240,50 @@ def verify_accounts(request):
     messages.success(request, _("%(ok)s verified, %(bad)s not verified.") % {"ok": ok, "bad": bad}
                      + (_(" %(n)s left: run it again.") % {"n": skipped} if skipped else ""))
     return redirect(request.POST.get("next") or "bx-accounts")
+
+
+# ------------------------------------------------------------ live account-name lookup (used by the bank forms)
+from django.core.cache import cache  # noqa: E402
+from django.http import JsonResponse  # noqa: E402
+
+LOOKUP_PER_MINUTE = 40
+
+
+@login_required
+def lookup_account(request):
+    """JSON {status, account_name, name_matches, message} for ?account_number=&bank_code= (or bank_id / bank_name)."""
+    u = request.user
+    if not (u.has_perm("employee.change_employeebankdetails") or u.has_perm("employee.add_employeebankdetails")
+            or u.has_perm(P + "edit_bank_accounts")):
+        return JsonResponse({"status": "error", "message": _("Not allowed.")}, status=403)
+    key = f"bx-lookup:{u.pk}"
+    cache.add(key, 0, 60)
+    try:
+        used = cache.incr(key)
+    except ValueError:
+        used = 1
+    if used > LOOKUP_PER_MINUTE:
+        return JsonResponse({"status": "error", "message": _("Too many lookups, wait a minute.")}, status=429)
+    g = request.GET
+    acct = g.get("account_number", "").strip()
+    bank = None
+    if g.get("bank_id", "").isdigit():
+        bank = Bank.objects.filter(pk=g["bank_id"]).first()
+    code = g.get("bank_code", "").strip()
+    if bank is None and (code or g.get("bank_name")):
+        bank = Bank.objects.filter(code=code).first() if code else Bank.objects.filter(name__iexact=g["bank_name"].strip()).first()
+    if not acct.isdigit() or len(acct) != services.account_length():
+        return JsonResponse({"status": "idle", "message": _("Enter the %(n)s-digit account number.") % {"n": services.account_length()}})
+    if bank is None:
+        return JsonResponse({"status": "idle", "message": _("Choose the bank.")})
+    if not paystack.is_configured():
+        return JsonResponse({"status": "error", "message": _("Paystack is not set up (Settings > Payroll > Paystack).")})
+    res = paystack.resolve(acct, bank.code)
+    match = None
+    emp = Employee.objects.filter(pk=g.get("employee")).first() if g.get("employee", "").isdigit() else None
+    if res.status == "verified" and emp is not None:
+        match = paystack.names_match(res.account_name, emp)
+    return JsonResponse({
+        "status": res.status, "account_name": res.account_name, "name_matches": match,
+        "message": _("Account not found at this bank.") if res.status == "failed" else res.message,
+    })

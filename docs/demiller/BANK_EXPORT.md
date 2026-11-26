@@ -62,3 +62,14 @@ Paystack returns the name the bank holds for the account. It is shown, read only
 - Bank Payments > Accounts (column "Account name (Paystack)") and the worker's edit page.
 
 Saving a bank form re-checks the account automatically. Update-mode imports do not check; use "Check" on the Accounts page.
+
+
+### Paystack key: where it goes (updated)
+
+- **Settings > Payroll > Paystack** (below Encashment Settings): paste the secret key and use "Save and test the key". A key saved here wins.
+- Or set the environment variable `PAYSTACK_SECRET_KEY` (cPanel: Setup Python App > Environment variables, then **Restart** the app; the variable is only read at start-up). It is used when nothing is saved on the settings page.
+- Accounts already in the system are not checked retroactively: open **Bank Payments > Accounts** and press **Check all unverified accounts with Paystack** (60 at a time; press again for the rest).
+
+### Account Name while typing
+
+On the employee's bank form (and Bank Payments > Accounts > Edit), the read-only **Account Name** box fills itself as soon as a 10-digit account number and a bank are entered, before saving, so the person can see whose account it is and correct a typo. Nothing is saved by the lookup. Saving the form still records the result on the employee.

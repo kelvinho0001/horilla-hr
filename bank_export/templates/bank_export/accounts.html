@@ -10,7 +10,7 @@
     <div class="col-12 col-md-2"><button class="oh-btn oh-btn--secondary w-100">{% trans "Show" %}</button></div>
   </form>
 </div>
-{% if can_edit %}<div class="mb-3">{% if paystack_ready %}<form method="post" action="{% url 'bx-verify' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="oh-btn oh-btn--secondary">{% trans "Check all unverified accounts with Paystack" %}</button></form>{% else %}<span class="text-muted">{% trans "Paystack is not set up yet: Settings > General > Paystack." %}</span>{% endif %}</div>{% endif %}
+{% if can_edit %}<div class="mb-3">{% if paystack_ready %}<form method="post" action="{% url 'bx-verify' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="oh-btn oh-btn--secondary">{% trans "Check all unverified accounts with Paystack" %}</button></form>{% else %}<span class="text-muted">{% trans "Paystack is not set up yet: Settings > Payroll > Paystack." %}</span>{% endif %}</div>{% endif %}
 <p class="mb-2"><b>{{ problem_count }}</b> {% trans "of" %} {{ total }} {% trans "need attention" %}. <span class="text-muted">{% trans "Details come from each worker's Employee > Bank details; pick the matching bank from the list so the bank code is exact. Only the last 4 digits of an account are shown." %}</span></p>
 <div class="oh-sticky-table"><div class="oh-sticky-table__table">
   <div class="oh-sticky-table__thead"><div class="oh-sticky-table__tr">

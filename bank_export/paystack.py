@@ -1,11 +1,12 @@
 """
 Paystack account-name lookup (GET /bank/resolve). Asks Paystack who owns an account number at a bank; no money moves.
 
-The secret key comes from Settings > General > Paystack (PaystackSettings), or the PAYSTACK_SECRET_KEY environment
+The secret key comes from Settings > Payroll > Paystack (PaystackSettings), or the PAYSTACK_SECRET_KEY environment
 variable if nothing is saved there. Paystack bank codes are the CBN codes in the bank list ('044', '058' ...).
 """
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 
@@ -28,10 +29,13 @@ class Result:
 
 
 def secret_key():
+    """Key saved in Settings > Payroll > Paystack, else the PAYSTACK_SECRET_KEY environment variable."""
     row = PaystackSettings.objects.first()
-    if row is not None:
-        return (row.secret_key or "").strip() if row.is_enabled else ""
-    return (getattr(settings, "PAYSTACK_SECRET_KEY", "") or "").strip()
+    if row is not None and not row.is_enabled:
+        return ""  # switched off on the settings page
+    if row is not None and (row.secret_key or "").strip():
+        return row.secret_key.strip()
+    return (os.environ.get("PAYSTACK_SECRET_KEY") or getattr(settings, "PAYSTACK_SECRET_KEY", "") or "").strip()
 
 
 def is_configured():
@@ -41,7 +45,7 @@ def is_configured():
 def resolve(account_number, bank_code, key=None):
     key = key or secret_key()
     if not key:
-        return Result("error", message="Paystack is not set up (Settings > General > Paystack).")
+        return Result("error", message="Paystack is not set up (Settings > Payroll > Paystack).")
     try:
         r = requests.get(
             URL, params={"account_number": account_number, "bank_code": bank_code},

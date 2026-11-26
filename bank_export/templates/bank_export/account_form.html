@@ -1,14 +1,65 @@
 {% extends "demiller/page.html" %}{% load i18n %}
-{% block page_title %}{% trans "Bank account" %} — {{ emp.get_full_name }}{% endblock %}
-{% block page_tabs %}{% include "bank_export/_nav.html" %}{% endblock %}
+{% block page_title %}{% trans "Bank account" %} — {{ emp.get_full_name }}<script>
+(function(){
+  var out=document.getElementById('acct_name'), acct=document.getElementById('id_account_number'), bank=document.getElementById('id_bank'), t, last='';
+  if(!out||!acct||!bank){return;}
+  function run(){
+    var a=(acct.value||'').trim(), b=bank.value;
+    if(!/^[0-9]{10}$/.test(a)||!b){ return; }
+    var key=a+'|'+b; if(key===last){return;} last=key; out.value='Checking...';
+    fetch('{% url "bx-lookup" %}?account_number='+encodeURIComponent(a)+'&bank_id='+encodeURIComponent(b)+'&employee='+out.dataset.employee,{credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(d){ out.value = d.status==='verified' ? d.account_name+(d.name_matches===false?'  (differs from the employee name)':'') : (d.message||'Could not check'); })
+      .catch(function(){ out.value='Could not check'; });
+  }
+  function later(){ clearTimeout(t); t=setTimeout(run,400); }
+  acct.addEventListener('input',later); bank.addEventListener('change',later);
+})();
+</script>
+{% endblock %}
+{% block page_tabs %}{% include "bank_export/_nav.html" %}<script>
+(function(){
+  var out=document.getElementById('acct_name'), acct=document.getElementById('id_account_number'), bank=document.getElementById('id_bank'), t, last='';
+  if(!out||!acct||!bank){return;}
+  function run(){
+    var a=(acct.value||'').trim(), b=bank.value;
+    if(!/^[0-9]{10}$/.test(a)||!b){ return; }
+    var key=a+'|'+b; if(key===last){return;} last=key; out.value='Checking...';
+    fetch('{% url "bx-lookup" %}?account_number='+encodeURIComponent(a)+'&bank_id='+encodeURIComponent(b)+'&employee='+out.dataset.employee,{credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(d){ out.value = d.status==='verified' ? d.account_name+(d.name_matches===false?'  (differs from the employee name)':'') : (d.message||'Could not check'); })
+      .catch(function(){ out.value='Could not check'; });
+  }
+  function later(){ clearTimeout(t); t=setTimeout(run,400); }
+  acct.addEventListener('input',later); bank.addEventListener('change',later);
+})();
+</script>
+{% endblock %}
 {% block page_body %}
 <div class="dm-form-card" style="max-width: 760px;">
   <form method="post">{% csrf_token %}
     {% include "demiller/_form_fields.html" with cols=6 %}
     <div class="oh-input-group mb-3"><label class="oh-label">{% trans "Account name" %}</label>
-      <input class="oh-input w-100" readonly value="{% if check and check.status == 'verified' %}{{ check.account_name }}{% elif check and check.status == 'failed' %}{% trans 'Account not found at this bank' %}{% endif %}" placeholder="{% trans 'Filled in automatically after saving' %}">
-      <small class="text-muted">{% trans "Read only: the name the bank holds for this account number." %}</small></div>
+      <input id="acct_name" class="oh-input w-100" readonly data-employee="{{ emp.pk }}" value="{% if check and check.status == 'verified' %}{{ check.account_name }}{% elif check and check.status == 'failed' %}{% trans 'Account not found at this bank' %}{% endif %}" placeholder="{% trans 'Appears once the account number and bank are entered' %}">
+      <small class="text-muted">{% trans "Read only: looked up from the bank as you type, so you can check it before saving." %}</small></div>
     <div class="d-flex flex-row-reverse"><button class="oh-btn oh-btn--secondary">{% trans "Save" %}</button></div>
   </form>
 </div>
+<script>
+(function(){
+  var out=document.getElementById('acct_name'), acct=document.getElementById('id_account_number'), bank=document.getElementById('id_bank'), t, last='';
+  if(!out||!acct||!bank){return;}
+  function run(){
+    var a=(acct.value||'').trim(), b=bank.value;
+    if(!/^[0-9]{10}$/.test(a)||!b){ return; }
+    var key=a+'|'+b; if(key===last){return;} last=key; out.value='Checking...';
+    fetch('{% url "bx-lookup" %}?account_number='+encodeURIComponent(a)+'&bank_id='+encodeURIComponent(b)+'&employee='+out.dataset.employee,{credentials:'same-origin'})
+      .then(function(r){return r.json();})
+      .then(function(d){ out.value = d.status==='verified' ? d.account_name+(d.name_matches===false?'  (differs from the employee name)':'') : (d.message||'Could not check'); })
+      .catch(function(){ out.value='Could not check'; });
+  }
+  function later(){ clearTimeout(t); t=setTimeout(run,400); }
+  acct.addEventListener('input',later); bank.addEventListener('change',later);
+})();
+</script>
 {% endblock %}

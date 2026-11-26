@@ -117,7 +117,7 @@ class ExportBatch(models.Model):
 
 
 class PaystackSettings(models.Model):
-    """One row. The Paystack secret key lives here (Settings > General > Paystack), never in the code."""
+    """One row. The Paystack secret key lives here (Settings > Payroll > Paystack), never in the code."""
 
     secret_key = models.CharField(max_length=200, blank=True)
     is_enabled = models.BooleanField(default=True)
